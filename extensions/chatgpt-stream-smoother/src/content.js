@@ -70,7 +70,7 @@
     if (candidate === scrollElement || candidate.parentElement !== scrollElement) return null;
     const composer = document.querySelector("#prompt-textarea");
     if (composer && candidate.contains(composer)) return null;
-    if (candidate.style.translate) return null; // Never overwrite ChatGPT's own translation.
+    if (candidate !== mover && candidate.style.translate) return null; // Never overwrite ChatGPT's own translation.
     return candidate;
   }
 
