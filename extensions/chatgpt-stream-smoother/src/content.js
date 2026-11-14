@@ -129,8 +129,13 @@
     const now = performance.now();
     // Native streaming scrolls are expected. A scroll unrelated to recent
     // streamed content is treated as navigation and immediately releases us.
-    if (now - recentMutationAt > 500) suspendForManualScroll();
-    else sampleGeometry(now);
+    if (now - recentMutationAt > 500 &&
+        distanceFromBottom(scroller) > settings.bottomThresholdPx) {
+      suspendForManualScroll();
+    } else {
+      sampleGeometry(now);
+      scheduleFrame();
+    }
   }
 
   function sampleGeometry(now) {
