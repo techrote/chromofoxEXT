@@ -14,7 +14,7 @@ for relative, expected in manifest["files"].items():
         failures.append(f"missing: {relative}")
         continue
     data = f.read_bytes()
-    got = hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\\0" + data).hexdigest()
+    got = hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\0" + data).hexdigest()
     if got != expected:
         failures.append(f"mismatch: {relative}: {got} != {expected}")
 if failures:
