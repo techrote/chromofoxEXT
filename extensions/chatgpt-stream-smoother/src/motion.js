@@ -19,25 +19,29 @@
 
   // Integrated trapezoidal/curved velocity profile. No overshoot or easing
   // discontinuity, and acceleration and deceleration can be adjusted separately.
-  function easedProgress(t, accelerationFraction, decelerationFraction, power, strength) {
+  function easedProgress(t, accelerationFraction, decelerationFraction, power,
+    accelerationStrength, decelerationStrength = accelerationStrength) {
     const u = Math.max(0, Math.min(1, t));
     const a = Math.max(0, Math.min(0.45, accelerationFraction));
     const d = Math.max(0, Math.min(0.45, decelerationFraction));
     const p = Math.max(1, power);
-    const area = 1 - (a + d) * p / (p + 1);
+    const sa = Math.max(0, Math.min(1, accelerationStrength));
+    const sd = Math.max(0, Math.min(1, decelerationStrength));
+    const area = 1 - (a * sa + d * sd) * p / (p + 1);
     let integrated;
     if (a > 0 && u < a) {
-      integrated = Math.pow(u, p + 1) / ((p + 1) * Math.pow(a, p));
+      integrated = u * (1 - sa) +
+        sa * Math.pow(u, p + 1) / ((p + 1) * Math.pow(a, p));
     } else if (u <= 1 - d) {
-      integrated = a / (p + 1) + (u - a);
+      integrated = a * (1 - sa * p / (p + 1)) + (u - a);
     } else if (d > 0) {
-      integrated = a / (p + 1) + (1 - a - d) +
-        d / (p + 1) * (1 - Math.pow((1 - u) / d, p + 1));
+      integrated = a * (1 - sa * p / (p + 1)) + (1 - a - d) +
+        (1 - sd) * (u - (1 - d)) +
+        sd * d / (p + 1) * (1 - Math.pow((1 - u) / d, p + 1));
     } else {
-      integrated = a / (p + 1) + (u - a);
+      integrated = a * (1 - sa * p / (p + 1)) + (u - a);
     }
-    const smooth = integrated / area;
-    return (1 - strength) * u + strength * smooth;
+    return integrated / area;
   }
 
   const POWERS = { linear: 1, quadratic: 2, cubic: 3, quintic: 5 };
@@ -125,7 +129,8 @@
           this.options.animatedAccelerationPct / 100,
           this.options.animatedDecelerationPct / 100,
           POWERS[this.options.animatedCurve],
-          this.options.animatedStrengthPct / 100);
+          this.options.animatedAccelerationStrengthPct / 100,
+          this.options.animatedDecelerationStrengthPct / 100);
         this.remaining = Math.max(0, this.remaining -
           this.activeStep * (ease(after) - ease(before)));
         this.stepElapsedMs += slice;

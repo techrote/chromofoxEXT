@@ -8,7 +8,7 @@ Self-contained, no-build Firefox/Chromium MV3 extension for chatgpt.com. Smooths
 | --- | --- | --- |
 | Standard input buffer | Measured displacement enters a visual lag buffer; interpolate release speed from a user-editable list of depth (lines) : speed (px/s) limits | Arbitrary ascending depth/speed table, auto or manual line height, max lag |
 | Soft push | Each new displacement increases ramped acceleration demand; dynamic braking and speed ceiling | Acceleration, braking, speed cap, ramp duration, line impulse gain |
-| Animated | Retain line-by-line progression, but ease each step's velocity separately | Line duration, acceleration/deceleration fractions, curve, easing amplitude, catch-up |
+| Animated | Retain line-by-line progression, but ease each step's velocity separately | Line duration, separate acceleration/deceleration fractions and amplitudes, curve, catch-up |
 
 The feature alters *visual movement*, not token streaming, insertion or content. It leaves ChatGPT's internal scroll API and actual scroll position unchanged.
 

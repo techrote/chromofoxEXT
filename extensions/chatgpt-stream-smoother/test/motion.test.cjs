@@ -84,6 +84,12 @@ test("soft push additional line demand never teleports velocity", () => {
   e.advance(16);
   assert.ok(e.velocity < 480);
 });
+test("acceleration and deceleration amplitudes are independently adjustable", () => {
+  const accelerate = easedProgress(.15, .3, .3, 3, 1, 0);
+  const decelerate = easedProgress(.15, .3, .3, 3, 0, 1);
+  assert.notEqual(accelerate, decelerate);
+  assert.equal(easedProgress(.4, .3, .3, 3, 0, 0), .4);
+});
 test("animated easing is monotonic and reaches both endpoints", () => {
   for (const power of [1, 2, 3, 5]) {
     let prior = 0;

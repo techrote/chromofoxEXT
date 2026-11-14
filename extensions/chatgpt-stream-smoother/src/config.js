@@ -19,7 +19,8 @@
     animatedAccelerationPct: 28,
     animatedDecelerationPct: 28,
     animatedCurve: "quadratic",
-    animatedStrengthPct: 100,
+    animatedAccelerationStrengthPct: 100,
+    animatedDecelerationStrengthPct: 100,
     animatedCatchup: 0.35
   });
 
@@ -79,7 +80,8 @@
       animatedAccelerationPct: numeric(value.animatedAccelerationPct, 0, 45, DEFAULTS.animatedAccelerationPct),
       animatedDecelerationPct: numeric(value.animatedDecelerationPct, 0, 45, DEFAULTS.animatedDecelerationPct),
       animatedCurve: curve,
-      animatedStrengthPct: numeric(value.animatedStrengthPct, 0, 100, DEFAULTS.animatedStrengthPct),
+      animatedAccelerationStrengthPct: numeric(value.animatedAccelerationStrengthPct, 0, 100, DEFAULTS.animatedAccelerationStrengthPct),
+      animatedDecelerationStrengthPct: numeric(value.animatedDecelerationStrengthPct, 0, 100, DEFAULTS.animatedDecelerationStrengthPct),
       animatedCatchup: numeric(value.animatedCatchup, 0, 2, DEFAULTS.animatedCatchup)
     };
   }
