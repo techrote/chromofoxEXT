@@ -1,0 +1,29 @@
+name: ChatGPT stream smoother smoke
+on:
+  push:
+    branches:
+      - feat/chatgpt-stream-smoother
+    paths:
+      - 'extensions/chatgpt-stream-smoother/**'
+      - '.github/workflows/chatgpt-stream-smoother.yml'
+  pull_request:
+    paths:
+      - 'extensions/chatgpt-stream-smoother/**'
+      - '.github/workflows/chatgpt-stream-smoother.yml'
+  workflow_dispatch:
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Manifest and JavaScript syntax
+        working-directory: extensions/chatgpt-stream-smoother
+        run: |
+          node -e "const m=require('./manifest.json'); if(m.manifest_version!==3||m.permissions.join(',')!=='storage'||m.content_scripts[0].matches.join(',')!=='https://chatgpt.com/*')process.exit(1)"
+          for f in src/*.js popup.js options.js; do node --check "$f"; done
+      - name: Model unit tests
+        run: node --test extensions/chatgpt-stream-smoother/test/*.test.cjs
