@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Tab Signal",
+  "version": "1.0.0",
+  "description": "Shows when each ChatGPT conversation is generating, finished, stopped or failed, using its tab title and favicon.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["core.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "action": {
+    "default_title": "ChatGPT Tab Signal",
+    "default_icon": {
+      "16": "icons/default16.png",
+      "32": "icons/default32.png",
+      "48": "icons/default48.png",
+      "128": "icons/default128.png"
+    },
+    "default_popup": "popup/popup.html"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/working64.png", "icons/done64.png", "icons/stopped64.png", "icons/error64.png"],
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"]
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chatgpt-tab-signal@local.dev",
+      "strict_min_version": "109.0"
+    }
+  }
+}

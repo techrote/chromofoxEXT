@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChatGPT Tab Signal</title>
+  <link rel="stylesheet" href="popup.css">
+  <script defer src="popup.js"></script>
+</head>
+<body>
+  <header>
+    <img src="../icons/default48.png" width="32" height="32" alt="">
+    <div>
+      <h1>ChatGPT Tab Signal</h1>
+      <p>Per-conversation activity indicators</p>
+    </div>
+  </header>
+  <section class="status-row" aria-live="polite">
+    <span id="status-dot" class="dot idle"></span>
+    <div>
+      <strong id="tab-status">Checking current tab…</strong>
+      <small id="tab-hint">Works on chatgpt.com tabs</small>
+    </div>
+  </section>
+  <fieldset>
+    <legend>Appearance</legend>
+    <label><input type="checkbox" id="titleIndicator"><span><strong>Tab title prefix</strong><small>⏳ Working · ✓ Finished · ■ Stopped · ! Error</small></span></label>
+    <label><input type="checkbox" id="faviconIndicator"><span><strong>Colored favicon</strong><small>Blue working, green finished, gray stopped, red error</small></span></label>
+    <label><input type="checkbox" id="toolbarBadge"><span><strong>Toolbar icon badge</strong><small>Reflects the active tab's status</small></span></label>
+  </fieldset>
+  <fieldset>
+    <legend>Completion</legend>
+    <label><input type="checkbox" id="latchUntilVisited"><span><strong>Keep status until I return</strong><small>Background tabs retain completion until visited</small></span></label>
+  </fieldset>
+  <button id="clear" type="button">Clear current tab status</button>
+  <div class="footer" id="footer">Runs locally. No messages or browsing data are transmitted.</div>
+</body>
+</html>
