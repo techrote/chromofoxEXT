@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Stream Smoother",
+  "version": "0.1.0",
+  "description": "Smooth streaming-response movement with buffer, soft-push and animated line-step models.",
+  "permissions": [
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "src/config.js",
+        "src/motion.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "ChatGPT Stream Smoother",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chatgpt-stream-smoother@chromofox.local",
+      "strict_min_version": "109.0"
+    }
+  }
+}

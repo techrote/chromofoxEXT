@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="ui.css"><title>Stream Smoother — settings</title></head>
+<body class="options">
+  <header><h1>ChatGPT Stream Smoother</h1><p>Three independent models for softening streaming-output movement. No network requests or content capture.</p></header>
+  <main>
+    <section class="panel">
+      <h2>Behaviour</h2>
+      <label class="check"><input type="checkbox" data-key="enabled"> Enable on chatgpt.com</label>
+      <label>Motion model
+        <select data-key="mode" id="mode">
+          <option value="buffer">Standard input buffer</option>
+          <option value="push">Soft push</option>
+          <option value="animated">Animated line steps</option>
+        </select>
+      </label>
+      <div class="fields">
+        <label>Line height, px <small>0 = estimate from text</small><input data-key="lineHeightPx" type="number" min="0" max="90" step="1"></label>
+        <label>Follow-bottom tolerance, px<input data-key="bottomThresholdPx" type="number" min="0" max="250" step="1"></label>
+        <label>Maximum buffered lag, lines<input data-key="maxLagLines" type="number" min="1" max="40" step="1"></label>
+        <label>Manual-scroll pause, ms<input data-key="suspendAfterScrollMs" type="number" min="250" max="10000" step="50"></label>
+      </div>
+      <label class="check"><input data-key="respectReducedMotion" type="checkbox"> Respect OS reduced-motion preference</label>
+    </section>
+    <section class="panel" data-mode-panel="buffer">
+      <h2>Standard input buffer</h2>
+      <p>New lines enter a visual lag buffer. The release speed is interpolated between your depth-to-speed limits; large backlogs catch up faster.</p>
+      <label>Speed ladder <small>One pair per line: buffer depth (lines) : speed (px/s). Ascending depths, non-decreasing speeds.</small>
+        <textarea data-key="speedLadder" rows="7" spellcheck="false" aria-label="Depth to speed ladder"></textarea>
+      </label>
+      <p class="hint">Example: 0:55, 1:100, 3:190, 6:350, 12:650.</p>
+    </section>
+    <section class="panel" data-mode-panel="push" hidden>
+      <h2>Soft push</h2>
+      <p>Each arriving line increases a ramped acceleration demand. Braking slows the canvas toward rest rather than abruptly changing velocity.</p>
+      <div class="fields">
+        <label>Acceleration, px/s²<input data-key="pushAcceleration" type="number" min="20" max="10000" step="10"></label>
+        <label>Braking, px/s²<input data-key="pushBraking" type="number" min="20" max="10000" step="10"></label>
+        <label>Speed ceiling, px/s<input data-key="pushSpeedLimit" type="number" min="10" max="3000" step="10"></label>
+        <label>Acceleration ramp, ms<input data-key="pushRampMs" type="number" min="10" max="2000" step="10"></label>
+        <label>Line impulse gain<input data-key="pushLineGain" type="number" min="0.05" max="4" step="0.05"></label>
+      </div>
+    </section>
+    <section class="panel" data-mode-panel="animated" hidden>
+      <h2>Animated line steps</h2>
+      <p>Move one line at a time, with independently adjustable acceleration and deceleration intervals and velocity curves.</p>
+      <div class="fields">
+        <label>Duration per line, ms<input data-key="animatedDurationMs" type="number" min="45" max="2000" step="5"></label>
+        <label>Acceleration phase, %<input data-key="animatedAccelerationPct" type="number" min="0" max="45" step="1"></label>
+        <label>Deceleration phase, %<input data-key="animatedDecelerationPct" type="number" min="0" max="45" step="1"></label>
+        <label>Easing curve<select data-key="animatedCurve"><option value="linear">Linear ramp</option><option value="quadratic">Quadratic ramp</option><option value="cubic">Cubic ramp</option><option value="quintic">Quintic ramp</option></select></label>
+        <label>Acceleration amplitude, %<input data-key="animatedAccelerationStrengthPct" type="number" min="0" max="100" step="5"></label>
+        <label>Deceleration amplitude, %<input data-key="animatedDecelerationStrengthPct" type="number" min="0" max="100" step="5"></label>
+        <label>Backlog catch-up factor <small>0 = fixed pace</small><input data-key="animatedCatchup" type="number" min="0" max="2" step="0.05"></label>
+      </div>
+    </section>
+    <div class="actions">
+      <button type="button" class="primary" id="save">Save settings</button>
+      <button type="button" id="reset">Restore defaults in form</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </div>
+    <p class="hint">Disabled by default until you enable it. Manual scrolling interrupts smoothing; returning to the bottom allows resumption. Conversation text is never stored.</p>
+  </main>
+  <script src="src/config.js"></script><script src="options.js"></script>
+</body></html>

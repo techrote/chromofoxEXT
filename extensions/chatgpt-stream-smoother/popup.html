@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="ui.css"><title>Stream Smoother</title></head>
+<body class="popup">
+  <header><h1>Stream Smoother</h1><p>chatgpt.com · streaming response motion</p></header>
+  <label class="check"><input id="enabled" type="checkbox"> Enable smoothing</label>
+  <label>Motion model
+    <select id="mode">
+      <option value="buffer">Standard input buffer</option>
+      <option value="push">Soft push</option>
+      <option value="animated">Animated line steps</option>
+    </select>
+  </label>
+  <p class="hint">Only operates while following the bottom of a streaming conversation. Manual scrolling takes priority.</p>
+  <button id="advanced" class="primary" type="button">Fine-grained controls</button>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+  <script src="src/config.js"></script><script src="popup.js"></script>
+</body></html>

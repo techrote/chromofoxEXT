@@ -1,0 +1,30 @@
+:root { color-scheme: light dark; font: 14px/1.45 system-ui, -apple-system, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: Canvas; color: CanvasText; }
+body.options { max-width: 800px; margin: 26px auto 50px; padding: 0 22px; }
+body.popup { width: 345px; padding: 15px 17px; }
+header { margin-bottom: 18px; }
+h1 { font-size: 1.4rem; margin: 0 0 5px; }
+h2 { font-size: 1.08rem; margin: 0 0 10px; }
+p { margin: 7px 0 12px; }
+header p, .hint, small { color: GrayText; }
+.hint { font-size: .88rem; }
+small { display: block; margin: 2px 0 5px; font-weight: 400; }
+.panel { border: 1px solid color-mix(in srgb, CanvasText 20%, transparent); border-radius: 9px; padding: 18px; margin: 18px 0; }
+[hidden] { display: none !important; }
+label { display: block; margin: 10px 0; font-weight: 570; }
+label.check { display: flex; align-items: center; gap: 9px; }
+input[type="checkbox"] { width: 17px; height: 17px; margin: 0; }
+input[type="number"], select, textarea {
+  display: block; width: 100%; min-width: 0; padding: 7px 9px; margin-top: 5px;
+  font: inherit; color: CanvasText; background: Canvas;
+  border: 1px solid GrayText; border-radius: 5px;
+}
+textarea { font-family: ui-monospace, monospace; resize: vertical; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 5px 17px; }
+button { font: inherit; padding: 9px 13px; border: 1px solid GrayText; border-radius: 6px; cursor: pointer; background: Canvas; color: CanvasText; }
+button.primary { background: #235ad1; border-color: #235ad1; color: #fff; }
+button:hover { filter: brightness(.94); }
+.actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.status { font-size: .88rem; color: GrayText; min-height: 1rem; }
+.popup button { width: 100%; }
