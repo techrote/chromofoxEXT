@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="style.css"><title>Actions Jumper settings</title></head>
+<body class="options"><h1>Actions Jumper settings</h1><form id="options">
+<label for="owner">GitHub username / organisation</label><input id="owner" required maxlength="39" spellcheck="false" placeholder="techrote">
+<label for="filters">Actions query presets — one per line in <code>Label | query</code> format</label>
+<textarea id="filters" rows="9" spellcheck="false"></textarea>
+<p class="help">Queries use GitHub Actions search syntax. Example: <code>Running | is:in_progress</code>. The first preset is selected by default. Empty query shows all runs.</p>
+<button class="primary" type="submit">Save settings</button><span id="saved" role="status"></span></form><script src="options.js"></script></body></html>
