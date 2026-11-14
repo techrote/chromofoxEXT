@@ -1,0 +1,21 @@
+.cgpt-timestamp-label {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  margin: 3px 0 7px !important;
+  padding: 0 12px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  opacity: 0.57 !important;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+  line-height: 1.4 !important;
+  letter-spacing: 0.01em !important;
+  pointer-events: auto !important;
+  user-select: text !important;
+}
+.cgpt-timestamp-label[data-cgpt-role="user"] { text-align: right !important; }
+.cgpt-timestamp-label[data-cgpt-role="assistant"] { text-align: left !important; }
