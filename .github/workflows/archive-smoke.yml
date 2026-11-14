@@ -1,0 +1,28 @@
+name: Browser extension archive smoke
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  static-and-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify exact archival source blobs
+        run: python scripts/check_source_integrity.py
+      - name: Test Firefox Actions Jumper
+        run: node --test firefox/actions-jumper-v2/tests/*.test.cjs
+      - name: Test Firefox Message Timestamps
+        run: node --test firefox/chatgpt-timestamps/tests/*.test.js
+      - name: Test Firefox ChatGPT Tab Signal
+        run: node --test firefox/chatgpt-tab-signal/tests/*.test.js
+      - name: Validate Chrome QOL suite manifest and assets
+        run: python chrome/chatGPTchromeQOL/chatgpt-qol-suite/tests/test_manifest.py
