@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Actions Jumper</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="popup">
+  <header class="popup-head">
+    <span class="brand"><img src="icons/icon32.png" width="20" height="20" alt="">Actions Jumper</span>
+    <button id="settings" class="icon-button" type="button" aria-label="Open configuration window" title="Configuration">⚙</button>
+  </header>
+  <form id="jump-form" autocomplete="off">
+    <label class="visually-hidden" for="repo">Repository name</label>
+    <div class="completion-wrap">
+      <div class="ghost" id="ghost" aria-hidden="true"><span id="ghost-prefix"></span><span class="ghost-suffix" id="ghost-suffix"></span></div>
+      <input id="repo" type="text" role="combobox" aria-autocomplete="both" aria-controls="suggestions" aria-expanded="false" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Repository…" autofocus>
+    </div>
+    <ul id="suggestions" role="listbox" aria-label="Repository matches" hidden></ul>
+    <button id="open" class="visually-hidden" type="submit">Open GitHub Actions</button>
+  </form>
+  <div class="popup-footer"><span id="hint">Tab complete · Enter open · Ctrl+Enter exact</span><span id="status" role="status" aria-live="polite"></span></div>
+  <script src="core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

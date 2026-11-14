@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Actions Jumper — configuration</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="options">
+  <h1>Actions Jumper</h1>
+  <p class="intro">Configuration · Changes apply to both the toolbar search and <code>ga</code> address-bar searches.</p>
+  <form id="configuration" autocomplete="off">
+    <label for="owner">GitHub username or organisation</label>
+    <input id="owner" type="text" maxlength="39" required spellcheck="false" placeholder="techrote">
+    <p class="help">Public repositories are fetched automatically. Previously visited private repositories are also suggested from your local history.</p>
+
+    <div class="two-col">
+      <div>
+        <label for="preset-picker">Load filter preset</label>
+        <select id="preset-picker" aria-label="Choose a saved filter preset"></select>
+      </div>
+      <div>
+        <label for="active-query">Active GitHub Actions query</label>
+        <input id="active-query" spellcheck="false" maxlength="500" placeholder="is:in_progress">
+      </div>
+    </div>
+    <p class="help">The active query applies automatically when opening a repository. Example: <code>is:in_progress branch:main</code>. Leave blank for all runs.</p>
+
+    <label for="presets">Saved filter presets</label>
+    <textarea id="presets" rows="6" spellcheck="false" aria-describedby="preset-help"></textarea>
+    <p class="help" id="preset-help">One preset per line in <code>Name | query</code> format. An empty query is allowed. Edited presets become available in the selector above.</p>
+
+    <div class="button-row">
+      <button class="primary" type="submit">Save configuration</button>
+      <span id="save-status" role="status" aria-live="polite"></span>
+    </div>
+  </form>
+
+  <section class="history" aria-label="Personal popularity">
+    <div class="history-header">
+      <h2>Personal popularity</h2>
+      <button class="secondary" type="button" id="clear-history">Clear usage data</button>
+    </div>
+    <p class="help">Short inputs (one or two characters) favour repositories you open most often. Activity decays with a 30-day half-life; counts and timestamps stay on this device, in this Firefox profile.</p>
+    <ol id="history-list" aria-label="Most frequently used repositories"></ol>
+    <p id="history-empty" class="empty" hidden>No repository opens recorded for this account yet.</p>
+  </section>
+
+  <script src="core.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
