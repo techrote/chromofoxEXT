@@ -1,0 +1,27 @@
+name: Link QR Popout
+
+on:
+  push:
+    paths:
+      - "extensions/link-qr-popout/**"
+      - ".github/workflows/link-qr-popout.yml"
+  pull_request:
+    paths:
+      - "extensions/link-qr-popout/**"
+      - ".github/workflows/link-qr-popout.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: JavaScript syntax and unit tests
+        working-directory: extensions/link-qr-popout
+        run: |
+          node --check background.js
+          node --check popup.js
+          node --check vendor/qrcode.js
+          node --test tests/extension.test.cjs

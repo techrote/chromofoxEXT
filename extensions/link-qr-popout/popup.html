@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Link QR Popout</title>
+  <link rel="stylesheet" href="popup.css">
+  <script defer src="vendor/qrcode.js"></script>
+  <script defer src="popup.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">LINK TRANSFER</p>
+      <h1>Display as QR code</h1>
+      <p class="intro">Scan to open this link on another device.</p>
+    </header>
+    <div class="qr-frame">
+      <canvas id="qr" role="img" aria-label="QR code for the link below"></canvas>
+    </div>
+    <label for="link">Original link</label>
+    <textarea id="link" readonly rows="2" spellcheck="false" aria-label="Original link"></textarea>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <div class="actions">
+      <button id="copy-link" type="button">Copy link</button>
+      <button id="save-png" type="button" disabled>Save PNG</button>
+    </div>
+    <p class="privacy">Created offline. No QR service or tracking.</p>
+  </main>
+</body>
+</html>

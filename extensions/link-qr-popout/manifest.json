@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Link QR Popout",
+  "version": "0.1.0",
+  "description": "Display any right-clicked link as a QR code in a small popout window. Offline, with no page access.",
+  "permissions": [
+    "contextMenus"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "service_worker": "background.js"
+  }
+}
