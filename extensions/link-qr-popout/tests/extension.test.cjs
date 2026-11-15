@@ -119,12 +119,15 @@ function runPopup(hash) {
   });
   vm.runInContext(read("vendor/qrcode.js"), context);
   vm.runInContext(read("popup.js"), context);
-  return { elements, rects, handlers, clipboard, downloaded };
+  return { elements, rects, handlers, clipboard, downloaded, encoder: context.qrcode };
 }
 
 test("popout draws sharp black modules with four-module quiet zone and supports actions", async () => {
   const link = "https://example.org/a?name=é&emoji=🎯#frag";
   const p = runPopup("#" + encodeURIComponent(link));
+  // Compare actual codeword input, not merely deterministic symbol geometry.
+  assert.deepEqual(Array.from(p.encoder.stringToBytes(link)), Array.from(Buffer.from(link, 'utf8')));
+  assert.deepEqual(Array.from(p.encoder.stringToBytes('é🎯')), Array.from(Buffer.from('é🎯', 'utf8')));
   assert.equal(p.elements.link.value, link);
   assert.equal(p.elements["save-png"].disabled, false);
   assert.equal(p.elements.qr.width, p.elements.qr.height);
