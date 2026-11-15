@@ -22,7 +22,7 @@
     <button data-action="guided" class="method"><span class="symbol">01</span><span><b>Guided real clicking</b><small>Count actual left-clicks around the spinner for up to 16 seconds. Closest to your reported workaround.</small></span></button>
     <button data-action="wake" class="method"><span class="symbol">02</span><span><b>Focus + repaint nudge</b><small>Focus, one-pixel scroll restore and resize/reflow. No reload.</small></span></button>
     <button data-action="pulse" class="method"><span class="symbol">03</span><span><b>Synthetic pointer pulses</b><small>Experimental untrusted events around a detected spinner. Cannot reproduce trusted hardware clicks.</small></span></button>
-    <button data-action="safe-sequence" class="method"><span class="symbol">04</span><span><b>Run safe sequence</b><small>Wake, observe, then pulse if still spinning. Automatically stops.</small></span></button>
+    <button data-action="safe-sequence" class="method"><span class="symbol">04</span><span><b>Run safe sequence</b><small>Wake, observe, then pointer movement (no clicks) if still spinning. Automatically stops.</small></span></button>
     <button id="stop" class="stop">Stop active experiment</button>
     <h2>Fresh navigation <small>(may discard unsent text)</small></h2>
     <div class="two"><button data-action="reload" class="nav">Normal reload</button><button data-action="hard-reload" class="nav">Bypass cache</button></div>
