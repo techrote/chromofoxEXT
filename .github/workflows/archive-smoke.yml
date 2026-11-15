@@ -26,3 +26,19 @@ jobs:
         run: node --test firefox/chatgpt-tab-signal/tests/*.test.js
       - name: Validate Chrome QOL suite manifest and assets
         run: python chrome/chatGPTchromeQOL/chatgpt-qol-suite/tests/test_manifest.py
+
+  chrome-suite-fixture:
+    # Keep this original-source archive byte-identical; exercise the archived
+    # Chromium suite in a separate offline CI job rather than modifying it.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install offline Chromium integration test dependencies
+        run: |
+          python -m pip install "playwright==1.56.0"
+          python -m playwright install --with-deps chromium
+      - name: Test archived Chrome QOL suite against local fixture
+        run: python chrome/chatGPTchromeQOL/chatgpt-qol-suite/tests/test_suite.py
