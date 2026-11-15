@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ChatGPT Conversation Rescue</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="eyebrow">CHROMOFOXEXT / CHAT-RESCUE-001</div>
+    <h1>Rescue stuck conversation</h1>
+    <p>Independent recovery experiments. Nothing is uploaded or stored.</p>
+  </header>
+  <section class="diagnostic" aria-label="Page diagnosis">
+    <div class="status-row"><strong id="state">Inspecting tab…</strong><span id="pill">—</span></div>
+    <div class="minor" id="thread">Checking current ChatGPT conversation</div>
+    <div class="metrics" id="metrics"></div>
+  </section>
+  <main>
+    <h2>No-navigation approaches</h2>
+    <button data-action="guided" class="method"><span class="symbol">01</span><span><b>Guided real clicking</b><small>Count actual left-clicks around the spinner for up to 16 seconds. Closest to your reported workaround.</small></span></button>
+    <button data-action="wake" class="method"><span class="symbol">02</span><span><b>Focus + repaint nudge</b><small>Focus, one-pixel scroll restore and resize/reflow. No reload.</small></span></button>
+    <button data-action="pulse" class="method"><span class="symbol">03</span><span><b>Synthetic pointer pulses</b><small>Experimental untrusted events around a detected spinner. Cannot reproduce trusted hardware clicks.</small></span></button>
+    <button data-action="safe-sequence" class="method"><span class="symbol">04</span><span><b>Run safe sequence</b><small>Wake, observe, then pointer movement (no clicks) if still spinning. Automatically stops.</small></span></button>
+    <button id="stop" class="stop">Stop active experiment</button>
+    <h2>Fresh navigation <small>(may discard unsent text)</small></h2>
+    <div class="two"><button data-action="reload" class="nav">Normal reload</button><button data-action="hard-reload" class="nav">Bypass cache</button></div>
+    <button data-action="new-tab" class="nav wide">Reopen conversation in a new tab <span>(preserves old tab)</span></button>
+  </main>
+  <section class="results" aria-label="Experiment results">
+    <div class="row"><strong>Last outcome</strong><button id="copy">Copy diagnostic JSON</button></div>
+    <p id="result">No experiment run in this page.</p>
+  </section>
+  <footer>
+    <p><b>Limits:</b> this cannot recover server-deleted data, force an unauthenticated API response, or prove that the full thread has loaded. A spinner-less page may need reload or official account export.</p>
+    <p id="notice" role="status" aria-live="polite"></p>
+  </footer>
+  <script src="logic.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

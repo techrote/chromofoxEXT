@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Conversation Rescue (chromofoxEXT)",
+  "version": "0.1.1",
+  "description": "Explicit, bounded experiments to revive a stuck ChatGPT conversation without reading its content.",
+  "permissions": ["activeTab"],
+  "browser_specific_settings": { "gecko": { "id": "chat-rescue@chromofoxext.local", "strict_min_version": "128.0" } },
+  "action": { "default_title": "Rescue stuck ChatGPT conversation", "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["logic.js", "content.js"],
+    "run_at": "document_idle",
+    "all_frames": false
+  }]
+}
