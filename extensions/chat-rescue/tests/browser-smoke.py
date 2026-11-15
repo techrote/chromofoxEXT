@@ -20,7 +20,7 @@ def msg(page, command, approach=None):
     }''', [command, approach])
 
 with sync_playwright() as pw:
-    browser = pw.chromium.launch(executable_path='/usr/bin/chromium', headless=True, args=['--no-sandbox'])
+    browser = pw.chromium.launch(headless=True, args=['--no-sandbox'])
     context = browser.new_context(viewport={'width':1100,'height':800})
     context.add_init_script('''window.chrome=window.chrome||{};window.chrome.runtime={onMessage:{addListener:function(f){window.__rescueListener=f}},lastError:null};''')
     page = context.new_page()
@@ -55,6 +55,15 @@ with sync_playwright() as pw:
     active = msg(page,'state')['state']['active']
     assert active['clicksNear']>=1,active
     assert msg(page,'stop')['ok']
+
+    # A SPA route change must cancel a running test and avoid cross-thread success.
+    assert msg(page,'start','guided')['ok']
+    page.evaluate("window.__mockUrl='https://chatgpt.com/c/99999999-9999-4999-8999-999999999999'")
+    page.wait_for_timeout(500)
+    page.evaluate('(url) => window.__mockUrl = url', URL)
+    moved = msg(page,'state')['state']
+    assert moved['active'] is None,moved
+    assert moved['last']['outcome']=='cancelled',moved
 
     # Wake should preserve initial scroll and observe appearance of a message marker.
     page.evaluate('''() => setTimeout(()=>{const el=document.createElement('article');el.dataset.testid='conversation-turn-0';document.querySelector('main').appendChild(el)},500)''')
