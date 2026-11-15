@@ -63,10 +63,12 @@
 
   function publicState() {
     const e = evidence();
+    if (current && current.conversationId !== e.conversationId) cancel('Conversation changed; operation cancelled');
     return {
       ...e,
       active: current ? { approach: current.approach, startedAt: current.startedAt, clicksNear: current.clicksNear, clicksElsewhere: current.clicksElsewhere, detail: current.detail } : null,
-      last: last ? { ...last } : null
+      // A SPA navigation must never display results from a different thread.
+      last: last && last.conversationId === e.conversationId ? { ...last } : null
     };
   }
 
@@ -111,7 +113,12 @@
   }
 
   function cancelledError() { return new Error('Stopped'); }
-  function assertActive(run) { if (run.cancelled || current !== run) throw cancelledError(); }
+  function assertActive(run) {
+    if (run.cancelled || current !== run) throw cancelledError();
+    if (L.conversationId(location.href) !== run.conversationId) {
+      throw new Error('Conversation changed; operation cancelled');
+    }
+  }
   function delay(ms, run) {
     return new Promise((resolve, reject) => {
       const id = setTimeout(() => { run.pending.delete(id); try { assertActive(run); resolve(); } catch (err) { reject(err); } }, ms);
@@ -134,7 +141,7 @@
     if (run.cleanup) run.cleanup();
     const now = evidence();
     last = {
-      approach: run.approach, outcome, detail,
+      approach: run.approach, outcome, detail, conversationId: run.conversationId,
       startedAt: run.startedAt, finishedAt: new Date().toISOString(),
       beforeState: run.beforeState, afterState: now.state,
       clicksNear: run.clicksNear, clicksElsewhere: run.clicksElsewhere,
@@ -155,10 +162,10 @@
     const start = Date.now();
     while (Date.now() - start < ms) {
       assertActive(run);
-      if (evidence().turnCount > 0) return true;
+      if (evidence().state === 'messages-visible') return true;
       await delay(300, run);
     }
-    return evidence().turnCount > 0;
+    return evidence().state === 'messages-visible';
   }
 
   function wake() {
@@ -219,10 +226,10 @@
     const start = Date.now();
     while (Date.now() - start < L.MAX_DURATION_MS && run.clicksNear + run.clicksElsewhere < L.MAX_CLICKS) {
       assertActive(run);
-      if (evidence().turnCount > 0) { finished = true; break; }
+      if (evidence().state === 'messages-visible') { finished = true; break; }
       await delay(250, run);
     }
-    return finished || evidence().turnCount > 0;
+    return finished || evidence().state === 'messages-visible';
   }
 
   async function runOperation(run) {
@@ -245,7 +252,10 @@
       assertActive(run);
       finish(run, visible ? 'messages-visible' : 'not-confirmed', visible ? 'Message elements appeared. Save/export this conversation while accessible.' : 'No visible message elements confirmed in the observation window.');
     } catch (err) {
-      if (current === run) finish(run, 'error', String(err?.message || err));
+      if (current === run) {
+        const detail = String(err?.message || err);
+        finish(run, detail === 'Conversation changed; operation cancelled' ? 'cancelled' : 'error', detail);
+      }
     }
   }
 
@@ -257,7 +267,8 @@
     if (current) return { ok: false, error: 'Another rescue operation is running. Stop it first.' };
     if (before.turnCount > 0) return { ok: false, error: 'Message elements already visible. Rescue action not needed.' };
     const run = {
-      id: ++serial, approach, startedAt: new Date().toISOString(), beforeState: before.state,
+      id: ++serial, approach, conversationId: before.conversationId,
+      startedAt: new Date().toISOString(), beforeState: before.state,
       beforeTurnCount: before.turnCount, cancelled: false, pending: new Map(),
       clicksNear: 0, clicksElsewhere: 0, detail: 'Starting', cleanup: null
     };
