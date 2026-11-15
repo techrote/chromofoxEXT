@@ -212,6 +212,29 @@
     if (!sent) throw new Error('All pulse targets were interactive or outside the viewport');
   }
 
+  function movementProbe(run) {
+    const spinner = findSpinner();
+    if (!spinner) return 0;
+    let sent = 0;
+    for (const p of L.ringPoints(spinner.center, 25, L.PULSE_COUNT)) {
+      assertActive(run);
+      if (p.x < 0 || p.y < 0 || p.x > innerWidth || p.y > innerHeight) continue;
+      const el = document.elementFromPoint(p.x, p.y);
+      if (!el || el.closest(INTERACTIVE) || el.closest('#chromofox-chat-rescue-ui')) continue;
+      const options = { bubbles: true, cancelable: true, clientX: p.x, clientY: p.y,
+        button: 0, buttons: 0, view: window };
+      // The automatic safe sequence NEVER emits a synthetic click/down/up.
+      if (typeof PointerEvent === 'function') {
+        el.dispatchEvent(new PointerEvent('pointermove', { ...options,
+          pointerId: 1, pointerType: 'mouse', isPrimary: true }));
+      }
+      el.dispatchEvent(new MouseEvent('mousemove', options));
+      sent++;
+    }
+    run.detail = `Sent ${sent} untrusted pointer-movement probes (no clicks)`;
+    return sent;
+  }
+
   async function guided(run) {
     const center = spinnerCenter();
     const radius = 125;
@@ -246,10 +269,10 @@
         updateOverlay('Experimental synthetic pointer pulses. These are NOT equivalent to real mouse clicks.');
         clickPulse(run); visible = await watch(run, 3000);
       } else if (run.approach === 'safe-sequence') {
-        updateOverlay('Safe sequence: wake → observe → synthetic pointer pulses if spinner remains. No reloads.');
+        updateOverlay('Safe sequence: wake → observe → pointer movement only if spinner remains. No clicks or reloads.');
         await wake();visible = await watch(run, 1500);
         if (!visible && findSpinner()) {
-          clickPulse(run);visible = await watch(run, 3000);
+          movementProbe(run);visible = await watch(run, 3000);
         }
       } else throw new Error('Unsupported approach');
       assertActive(run);
