@@ -91,17 +91,21 @@ if ($Action -eq 'Install') {
     $separatorTag = [regex]::Match($managed, '/\* chromofoxEXT inserted-separator: ([01]) \*/')
     $createdTag = [regex]::Match($managed, '/\* chromofoxEXT created-file: ([01]) \*/')
     $removeStart = $startIndex
-    if ($separatorTag.Success -and $separatorTag.Groups[1].Value -eq '1') {
-        if ($startIndex -lt $eol.Length -or $original.Substring($startIndex - $eol.Length, $eol.Length) -cne $eol) {
-            throw 'Expected managed block separator is missing; no changes made.'
-        }
-        $removeStart -= $eol.Length
-    }
     $removeEnd = $endIndex + $end.Length
     if ($original.Substring($removeEnd).StartsWith($eol, [System.StringComparison]::Ordinal)) {
         $removeEnd += $eol.Length
     } elseif ($original.Substring($removeEnd).StartsWith($lf, [System.StringComparison]::Ordinal)) {
         $removeEnd += $lf.Length
+    }
+    if ($separatorTag.Success -and $separatorTag.Groups[1].Value -eq '1') {
+        if ($startIndex -lt $eol.Length -or $original.Substring($startIndex - $eol.Length, $eol.Length) -cne $eol) {
+            throw 'Expected managed block separator is missing; no changes made.'
+        }
+        # Undo only our separator if nothing was appended after our block;
+        # otherwise keep it to separate the original CSS from later user rules.
+        if ($removeEnd -eq $original.Length) {
+            $removeStart -= $eol.Length
+        }
     }
     $updated = $original.Substring(0, $removeStart) + $original.Substring($removeEnd)
 }
