@@ -26,6 +26,9 @@ function readLinkFragment() {
 }
 
 function drawQr(link) {
+  // qrcode-generator defaults to charCodeAt() & 0xff (NOT UTF-8). Select its
+  // bundled UTF-8 byte codec or non-ASCII URLs silently encode incorrectly.
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
   // Vendored MIT-licensed qrcode-generator. 'M' has 15% error recovery.
   const qr = qrcode(0, "M");
   qr.addData(link, "Byte");
