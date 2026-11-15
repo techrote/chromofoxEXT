@@ -16,8 +16,9 @@
 
   function stateFromEvidence(evidence) {
     if (!evidence.eligible) return 'not-conversation';
-    if (evidence.turnCount > 0) return 'messages-visible';
+    // An explicit load failure must not be masked by stale DOM message markers.
     if (evidence.hasError) return 'error-visible';
+    if (evidence.turnCount > 0) return 'messages-visible';
     if (evidence.spinnerFound) return 'loading-indicator';
     return 'unconfirmed';
   }
