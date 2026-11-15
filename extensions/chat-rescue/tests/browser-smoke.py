@@ -41,6 +41,13 @@ with sync_playwright() as pw:
     assert page.evaluate('window.__pulseCount') <=16
     assert page.evaluate('window.__pulseCount') >=1
 
+    # The automatic safe sequence must not emit any synthetic click events.
+    previous_clicks = page.evaluate('window.__pulseCount')
+    assert msg(page,'start','safe-sequence')['ok']
+    page.wait_for_timeout(5000)
+    assert msg(page,'state')['state']['active'] is None
+    assert page.evaluate('window.__pulseCount') == previous_clicks
+
     # Cancellation should clear pending observation and release the active slot.
     assert msg(page,'start','guided')['ok']
     assert msg(page,'stop')['ok']
