@@ -50,7 +50,7 @@
     // Only count message element markers; do NOT read or collect conversation text.
     const turnCount = root.querySelectorAll(TURNS).length;
     const hasError = [...root.querySelectorAll(ERRORS)].slice(0, 12)
-      .some(el => /could not load this chatgpt conversation|unable to load conversation|conversation not found/i.test(el.textContent || ''));
+      .some(el => /could not load (?:this )?(?:chatgpt )?conversation|unable to load (?:this )?conversation|conversation not found/i.test(el.textContent || ''));
     return {
       eligible: Boolean(id), conversationId: id, turnCount,
       spinnerFound: Boolean(spinner), hasError,
@@ -63,7 +63,10 @@
 
   function publicState() {
     const e = evidence();
-    if (current && current.conversationId !== e.conversationId) cancel('Conversation changed; operation cancelled');
+    if (current && current.conversationId !== e.conversationId) {
+      cancel('Conversation changed; operation cancelled');
+      destroyOverlay();
+    }
     return {
       ...e,
       active: current ? { approach: current.approach, startedAt: current.startedAt, clicksNear: current.clicksNear, clicksElsewhere: current.clicksElsewhere, detail: current.detail } : null,
@@ -255,6 +258,7 @@
       if (current === run) {
         const detail = String(err?.message || err);
         finish(run, detail === 'Conversation changed; operation cancelled' ? 'cancelled' : 'error', detail);
+        if (detail === 'Conversation changed; operation cancelled') destroyOverlay();
       }
     }
   }
