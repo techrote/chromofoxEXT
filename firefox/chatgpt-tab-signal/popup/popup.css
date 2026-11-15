@@ -1,0 +1,30 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+* { box-sizing: border-box; }
+body { width: 330px; margin: 0; padding: 16px; color: light-dark(#14222f, #f1f4f7); background: light-dark(#fff, #191d22); }
+header { display: flex; align-items: center; gap: 11px; margin-bottom: 15px; }
+h1 { margin: 0 0 3px; font-size: 16px; font-weight: 700; }
+p, small { color: light-dark(#5f6974, #aab3bc); }
+p { margin: 0; font-size: 11px; }
+.status-row { display: flex; align-items: center; gap: 11px; padding: 11px 12px; border: 1px solid light-dark(#e2e6ea,#363d46); border-radius: 10px; background: light-dark(#f7f9fa,#222831); }
+.status-row strong, .status-row small { display: block; }
+.status-row small { margin-top: 2px; font-size: 11px; }
+.dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #8a919b; }
+.dot.working { background: #2875d4; }
+.dot.done { background: #13855d; }
+.dot.stopped { background: #7c8390; }
+.dot.error { background: #c83f46; }
+fieldset { border: 0; padding: 0; margin: 16px 0 0; }
+legend { padding: 0 0 6px; color: light-dark(#53606c,#abb5c0); font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; }
+label { display: flex; align-items: start; gap: 10px; padding: 8px 0; cursor: pointer; }
+label input { accent-color: #2875d4; margin: 3px 0 0; width: 16px; height: 16px; }
+label strong { font-weight: 600; }
+label strong, label small { display: block; }
+label small { margin-top: 2px; line-height: 1.35; font-size: 11px; }
+button { width: 100%; padding: 9px 8px; margin-top: 14px; font-weight: 600; border-radius: 7px; border: 1px solid light-dark(#ccd3da,#505a65); color: inherit; background: light-dark(#f7f9fa,#2b333b); cursor: pointer; }
+button:hover:not(:disabled) { background: light-dark(#e9eef3,#394551); }
+button:disabled { opacity: .42; cursor: not-allowed; }
+.footer { margin-top: 12px; color: light-dark(#68727c,#9da8b1); font-size: 10px; text-align: center; line-height: 1.3; }

@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Actions Jumper",
+  "version": "1.0.0",
+  "description": "Quickly jump to filtered GitHub Actions runs with repository autocomplete.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
+  "action": {
+    "default_title": "Jump to GitHub Actions",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "actions-jumper@example.org",
+      "strict_min_version": "109.0"
+    }
+  }
+}

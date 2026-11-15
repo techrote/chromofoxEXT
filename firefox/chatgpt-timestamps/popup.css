@@ -1,0 +1,26 @@
+:root { color-scheme: dark; font: 13px/1.5 system-ui, sans-serif; background: #11161d; color: #e5e9f0; }
+* { box-sizing: border-box; }
+body { width: 355px; margin: 0; }
+header { background: #18212b; padding: 21px 21px 16px; border-bottom: 1px solid #33404d; }
+.eyebrow { color: #71d8c0; font: 11px/1.2 ui-monospace, monospace; letter-spacing: 1px; }
+h1 { margin: 8px 0 3px; font-size: 20px; letter-spacing: -0.4px; }
+p { margin: 0; }
+header p { color: #aab6c4; font-size: 12px; }
+main { padding: 14px 20px 9px; }
+.count { display: flex; align-items: baseline; gap: 8px; margin: 2px 0 12px; }
+.count strong { color: #71d8c0; font-size: 22px; font-variant-numeric: tabular-nums; }
+.count span { color: #aab6c4; font-size: 12px; }
+.option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #2a333f; cursor: pointer; }
+.option strong { display: block; font-size: 13px; }
+.option small { display: block; margin-top: 2px; color: #9ca9b7; line-height: 1.35; font-size: 11px; }
+.option input { accent-color: #71d8c0; width: 17px; height: 17px; flex: 0 0 17px; }
+.actions { display: flex; gap: 8px; margin-top: 14px; }
+button { border: 1px solid #475969; border-radius: 5px; background: #253440; color: #e5e9f0; padding: 8px 11px; cursor: pointer; font: inherit; }
+button:hover { background: #334654; }
+button:focus-visible { outline: 2px solid #71d8c0; outline-offset: 2px; }
+.actions button { flex: 1; }
+.danger { width: 100%; color: #eab8b6; background: transparent; margin-top: 9px; border-color: #5c3d44; }
+.danger:hover { background: #402b33; }
+#status { min-height: 15px; margin-top: 9px; color: #71d8c0; font-size: 11px; }
+#status.error { color: #ff9996; }
+footer { padding: 10px 20px 15px; color: #8f9ca9; font-size: 11px; border-top: 1px solid #2a333f; }

@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Message Timestamps",
+  "version": "1.0.0",
+  "description": "Record and display local timestamps for ChatGPT messages, including across page reloads.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "chatgpt-message-timestamps@local.addon",
+      "strict_min_version": "115.0"
+    }
+  },
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+      "js": ["shared.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "ChatGPT Message Timestamps",
+    "default_popup": "popup.html",
+    "default_icon": { "48": "icons/48.png", "96": "icons/96.png" }
+  },
+  "icons": { "48": "icons/48.png", "96": "icons/96.png" }
+}

@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Actions Jumper",
+  "version": "2.0.0",
+  "description": "Jump to filtered GitHub Actions with inline repo autocomplete and personalised rankings.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*"
+  ],
+  "action": {
+    "default_title": "GitHub Actions Jumper \u2014 repository search",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    },
+    "default_popup": "popup.html",
+    "default_area": "navbar"
+  },
+  "icons": {
+    "48": "icons/icon48.png",
+    "96": "icons/icon96.png"
+  },
+  "background": {
+    "scripts": [
+      "core.js",
+      "background.js"
+    ]
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "omnibox": {
+    "keyword": "ga"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Period"
+      },
+      "description": "Open Actions Jumper repository search"
+    }
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "actions-jumper@example.org",
+      "strict_min_version": "127.0"
+    }
+  }
+}

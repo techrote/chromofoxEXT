@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CyberSand PR #566</title>
+<link rel="icon" type="image/png" href="./original.png">
+<script>
+window.__messages = [];
+window.__listeners = [];
+window.__storageListeners = [];
+window.browser = {
+  runtime: {
+    getURL(path) { return "https://tab-signal-fixture.invalid/" + path; },
+    sendMessage: async function(message) { window.__messages.push(message); return {}; },
+    onMessage: { addListener(fn) { window.__listeners.push(fn); } }
+  },
+  storage: {
+    local: {
+      async get(defaults) { return { ...defaults, ...window.__store }; },
+      async set(values) {
+        const changes = {};
+        for (const [key,value] of Object.entries(values)) {
+          changes[key] = { newValue: value, oldValue: window.__store[key] };
+        }
+        Object.assign(window.__store, values);
+        window.__storageListeners.forEach(fn => fn(changes,"local"));
+      }
+    },
+    onChanged: { addListener(fn) { window.__storageListeners.push(fn); } }
+  }
+};
+window.__store = {};
+window.__phase = () => window.__messages.at(-1)?.phase;
+window.__addStop = () => {
+  document.getElementById('stop')?.remove();
+  const button = document.createElement('button');
+  button.id = 'stop';
+  button.type = 'button';
+  button.dataset.testid = 'stop-button';
+  button.setAttribute('aria-label','Stop generating');
+  button.textContent = '■';
+  document.getElementById('composer').append(button);
+  return button;
+};
+window.__addIconOnlyStop = () => {
+  document.getElementById('stop')?.remove();
+  const form = document.getElementById('composer');
+  form.dataset.chatgptComposer = '';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.id = 'stop';
+  button.className = 'size-token-button-composer';
+  button.innerHTML = '<svg class="icon-primary-action" viewBox="0 0 20 20"><path d="' + ChatGPTTabSignalCore.STOP_GLYPH_PATH + '"></path></svg>';
+  form.append(button);
+};
+window.__removeStop = () => document.getElementById('stop')?.remove();
+window.__favicon = () => document.querySelector('link[rel="icon"]').getAttribute('href');
+</script>
+</head>
+<body><main><form id="composer"><button type="button" id="send">Send</button></form><div id="messages"></div></main>
+<script src="../core.js"></script>
+<script src="../content.js"></script>
+</body>
+</html>
