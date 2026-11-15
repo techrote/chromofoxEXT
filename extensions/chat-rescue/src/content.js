@@ -94,7 +94,7 @@
     const note = document.createElement('div'); note.className='note';
     const buttons = document.createElement('div'); buttons.className='buttons';
     const stop = document.createElement('button'); stop.textContent='Stop'; stop.addEventListener('click', () => cancel('Stopped by user'));
-    const close = document.createElement('button'); close.textContent='Close'; close.addEventListener('click', destroyOverlay);
+    const close = document.createElement('button'); close.textContent='Close'; close.addEventListener('click', () => { if (current) cancel('Stopped by closing overlay'); destroyOverlay(); });
     buttons.append(stop, close);panel.append(heading,note,buttons);shadow.append(style,panel);
     overlayElements={note,stop};document.documentElement.appendChild(overlay);
   }
