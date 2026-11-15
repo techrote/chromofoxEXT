@@ -17,6 +17,19 @@ This repository contains **original, recoverable implementations** rather than s
 
 The Chrome suite's 13 features are **not 13 additional signed releases**. They correspond to modules migrated from the standalone implementations. See [detailed inventory](docs/INVENTORY.md).
 
+## Feature development in separate pull requests
+
+The archive above is historical source custody. New experiments are reviewed
+separately and are **not** included in this archive's provenance manifest:
+
+- [#2 Link QR Popout](https://github.com/techrote/chromofoxEXT/pull/2) — offline QR codes for clicked links.
+- [#3 Stream Smoother](https://github.com/techrote/chromofoxEXT/pull/3) — experimental ChatGPT streaming presentation.
+- [#5 Hide Firefox tab close buttons](https://github.com/techrote/chromofoxEXT/pull/5) — profile-level userChrome.css helper, not a WebExtension.
+- [#6 Conversation Rescue](https://github.com/techrote/chromofoxEXT/pull/6) — experimental stuck-thread recovery, separate from eventual transcript backup.
+
+Each feature's own README carries installation instructions and its acceptance boundary.
+Follow its PR for exact review and merge status.
+
 ## Getting started
 
 **Firefox:** extract or open one project directory; in Firefox open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on…**, and select its `manifest.json`. Refresh existing ChatGPT tabs if required. Temporary extensions are unloaded when Firefox closes, and these are **unsigned**. The original ZIP files are preserved in [firefox/original-zips](firefox/original-zips).
