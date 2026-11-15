@@ -24,6 +24,7 @@ test('accepts only ChatGPT conversation URLs', () => {
 test('classifies only DOM-backed evidence, never claims full transcript', () => {
   assert.equal(L.stateFromEvidence({ eligible: false, turnCount: 20, spinnerFound: false }), 'not-conversation');
   assert.equal(L.stateFromEvidence({ eligible: true, turnCount: 1, spinnerFound: true }), 'messages-visible');
+  assert.equal(L.stateFromEvidence({ eligible: true, turnCount: 1, hasError: true, spinnerFound: true }), 'error-visible');
   assert.equal(L.stateFromEvidence({ eligible: true, turnCount: 0, hasError: true, spinnerFound: true }), 'error-visible');
   assert.equal(L.stateFromEvidence({ eligible: true, turnCount: 0, hasError: false, spinnerFound: true }), 'loading-indicator');
   assert.equal(L.stateFromEvidence({ eligible: true, turnCount: 0, hasError: false, spinnerFound: false }), 'unconfirmed');
