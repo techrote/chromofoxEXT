@@ -7,7 +7,7 @@
 1. **Guided real-click experiment** (16 seconds / 30 trusted click cap). Displays a small page overlay, counts real clicks within 125px of a detected spinner (or centre fallback), and compares clicks elsewhere. This is the only approach using actual trusted user-generated mouse clicks.
 2. **Focus + repaint nudge**. `window.focus()`, a 1px scroll and restoration, a layout read and synthetic resize, then observe for 3 seconds. No navigation.
 3. **Synthetic pointer pulse**. 16 bounded sequences around an identified spinner. `isTrusted === false`; may do nothing if React/browser checks trusted interactions. Skips buttons, links, form controls, editable surfaces. If no spinner is found, does nothing.
-4. **Safe sequence**. Run focus/repaint; observe, then synthetic pulse if a spinner remains, and observe. No reloads.
+4. **Safe sequence**. Run focus/repaint; observe, then **pointer-movement-only probes** if a spinner remains, and observe. It never dispatches synthetic clicks or reloads. Full synthetic click pulses remain a separate, explicitly selected method.
 5. **Normal reload**. Explicit user confirmation; may lose unsent text.
 6. **Bypass-cache reload**. Explicit user confirmation; may lose unsent text. Caches and service workers still have browser-specific behaviours; this is not a guaranteed total cache purge.
 7. **Open fresh tab**. Clone the current conversation URL in a new active tab, preserving the original tab.
