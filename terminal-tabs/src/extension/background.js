@@ -9,7 +9,9 @@ function ownTerminal(sender) {
   try {
     const url = new URL(sender.url);
     const expected = new URL(terminalURL);
-    return url.origin === expected.origin && url.pathname === expected.pathname;
+    // moz-extension: URLs can report an opaque ('null') origin; compare
+    // protocol, host and exact path instead, not the serialized origin.
+    return url.protocol === expected.protocol && url.host === expected.host && url.pathname === expected.pathname;
   } catch (_) { return false; }
 }
 function signal(ui, m) {

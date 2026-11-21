@@ -51,6 +51,9 @@ test("webpage and wrong extension page cannot bridge into native shell", () => {
   const other = ui(1, "moz-extension://example-uuid/popup.html");
   s.connected(other);
   assert.equal(other.disconnected, true);
+  const local = ui(1, "file:///terminal.html");
+  s.connected(local);
+  assert.equal(local.disconnected, true);
   assert.equal(s.nativeCreated.length, 0);
 });
 test("start/resize/input/output/ack close are isolated per browser tab", () => {
