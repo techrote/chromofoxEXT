@@ -111,8 +111,10 @@ def main():
                 "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mark,{once:true})}"
                 "else{mark()}")
             with sync_playwright() as p:
-                probe_args=[f'--disable-extensions-except={control}',
-                            f'--load-extension={control}','--no-sandbox']
+                # CDP installs only after Chromium has initialized its profile.
+                # A synchronous success ID avoids falsely assuming that CLI
+                # side-loading completed, and requires no background worker.
+                probe_args=['--no-sandbox','--enable-unsafe-extension-debugging']
                 probe_opts=dict(user_data_dir=str(root/'probe-profile'),
                     headless=False,channel='chromium',
                     ignore_default_args=['--disable-extensions'],args=probe_args)
@@ -122,6 +124,10 @@ def main():
                 probe=p.chromium.launch_persistent_context(**probe_opts)
                 try:
                     control_page=probe.new_page()
+                    probe_cdp=probe.new_cdp_session(control_page)
+                    control_install=probe_cdp.send('Extensions.loadUnpacked',{'path':str(control.resolve())})
+                    assert control_install.get('id'), 'Control MV3 failed to register via Extensions.loadUnpacked'
+                    print('REGISTRATION CONTROL ID:',control_install['id'],flush=True)
                     control_page.goto(f'http://127.0.0.1:{server.server_port}/',wait_until='load')
                     for _ in range(5):
                         if control_page.locator('html').get_attribute('data-mv3-control')=='loaded':
@@ -133,7 +139,7 @@ def main():
                     assert probe_loaded, 'Chromium could not load a trivial MV3 content-script extension: harness/browser registration failure'
                 finally:
                     probe.close()
-                args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
+                args=['--no-sandbox','--enable-unsafe-extension-debugging']
                 opts=dict(user_data_dir=str(profile),headless=False,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
                 if os.getenv('CHROME_BIN'):
                     opts['executable_path']=os.environ['CHROME_BIN'];del opts['channel']
@@ -144,6 +150,9 @@ def main():
                     cdp=browser.new_cdp_session(page)
                     cdp.on('Runtime.executionContextCreated',lambda e:contexts.append(e['context']))
                     cdp.send('Runtime.enable')
+                    installed=cdp.send('Extensions.loadUnpacked',{'path':str(ext.resolve())})
+                    assert installed.get('id'), 'Pro Send Guard failed to register via Extensions.loadUnpacked'
+                    print('PACKAGED EXTENSION ID:',installed['id'],flush=True)
                     decisions=[False,True,True]
                     dialogs=[]
                     def on_dialog(dialog):
@@ -153,9 +162,8 @@ def main():
                         assert decisions,'Unexpected extra confirmation'
                         (dialog.accept if decisions.pop(0) else dialog.dismiss)()
                     page.on('dialog',on_dialog)
-                    # Chromium installs unpacked extensions asynchronously at profile
-                    # startup. The first navigation can race registration. Retry
-                    # document loads on the same localhost origin, not production.
+                    # The CDP installer returned an extension ID before navigation;
+                    # the listener below must therefore run at document_start.
                     page.goto(f'http://127.0.0.1:{server.server_port}/',wait_until='load')
                     isolated=isolated_world_state(cdp,contexts)
                     for attempt in range(1, 7):
