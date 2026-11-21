@@ -76,7 +76,10 @@ browser.runtime.onConnect.addListener((ui) => {
         signal(ui, { type: "disconnected", message: e.message || "Native host unavailable" });
       }
     } else if (msg.type === "close") {
-      releaseNative(s, "Session closed");
+      // The UI already marks this intentional End as complete. Do not send
+      // a delayed 'disconnected' event: it may arrive after a new Start and
+      // incorrectly terminate the new session's pending state.
+      releaseNative(s);
     } else if (s.native) {
       try { s.native.postMessage(msg); } catch (_) {
         releaseNative(s, "Unable to send to native terminal host");

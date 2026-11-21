@@ -28,6 +28,7 @@ jobs:
         working-directory: terminal-tabs
         run: |
           npm install --ignore-scripts --no-audit --no-fund
+          echo "LOCKFILE_BASE64=$(base64 -w0 package-lock.json)"
           npm test
           npm run build
           node --check src/extension/background.js

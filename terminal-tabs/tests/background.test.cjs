@@ -92,3 +92,24 @@ test("invalid profile never reaches host; restarting closes previous connection"
   assert.equal(s.nativeCreated[0].disconnected, true);
   assert.equal(s.nativeCreated[1].disconnected, false);
 });
+
+test("End then immediate Start suppresses old close event and preserves new shell", () => {
+  const s=setup(), a=ui(55);
+  s.connected(a);
+  a.receive({ type: "start", profile: "cmd", cols: 80, rows: 24 });
+  const first=s.nativeCreated[0];
+  first.receive({type:"started"});
+  a.receive({ type:"close" });
+  // An explicit close must never enqueue an untagged "Session closed" reply.
+  assert.equal(a.sent.some(e=>e.type==="disconnected"), false);
+  a.receive({ type:"start", profile:"powershell", cols:80, rows:24 });
+  const second=s.nativeCreated[1];
+  // A stale disconnect/error callback from the retired native port must
+  // be ignored, even when it arrives after the second Start.
+  first.receive({type:"error", message:"old session failed"});
+  first.disconnect();
+  assert.equal(a.sent.filter(e=>e.type==="disconnected").length,0);
+  second.receive({type:"started"});
+  assert.equal(a.sent.filter(e=>e.type==="started").length,2);
+  assert.equal(second.disconnected,false);
+});

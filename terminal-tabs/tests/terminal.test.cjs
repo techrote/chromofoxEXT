@@ -81,3 +81,15 @@ test("late data and started messages after End cannot resurrect shell",()=>{
   assert.equal(old.writes.length,count);
   assert.equal(x.element("stop").disabled,true);
 });
+
+test("rapid End → Start accepts the second host started event",()=>{
+  const x=setup();
+  x.element("start").click();
+  x.receive({type:"started"});
+  x.element("stop").click();
+  x.element("start").click();
+  assert.equal(x.sent.filter(e=>e.type==="start").length,2);
+  x.receive({type:"started"});
+  assert.equal(x.element("start").disabled,true);
+  assert.equal(x.element("stop").disabled,false);
+});
