@@ -174,35 +174,66 @@ const observer = new ResizeObserver(() => {
 });
 observer.observe($("screen"));
 window.addEventListener("focus", () => { size(); });
-$("copy").addEventListener("click", async () => {
-  const selected = term.getSelection();
-  if (!selected) return;
-  try { await navigator.clipboard.writeText(selected); }
-  catch (_) { setStatus("Clipboard copy was blocked by Firefox", "error"); }
-});
-$("paste").addEventListener("click", async () => {
-  if (!running) return;
-  const currentGeneration = generation;
+// Clipboard access is deliberately user-gesture-only: do not request the
+// broad Firefox clipboardRead permission. Firefox 147+ can show a temporary
+// "Paste" confirmation when readText() is called from an extension page.
+const pasteError = "Paste unavailable — approve Firefox's Paste confirmation or focus the terminal and press Ctrl+V";
+function clipboardTarget() {
+  if (!running || !protocol.validSessionId(activeSessionId)) return null;
+  return { sessionId: activeSessionId, generation, terminal: term };
+}
+function targetIsCurrent(target) {
+  return !!target && running && generation === target.generation &&
+    activeSessionId === target.sessionId && term === target.terminal;
+}
+function clipboardFailure(target, message) {
+  // The browser permission prompt can resolve/reject after End -> Start.
+  // A stale completion must never overwrite B's status or send input to B.
+  if (targetIsCurrent(target)) setStatus(message, "error");
+}
+function pasteFromClipboard() {
+  const target = clipboardTarget();
+  if (!target) return;
+  let reading;
   try {
-    const content = await navigator.clipboard.readText();
-    if (running && currentGeneration === generation) term.paste(content);
+    // Call synchronously from the button/key event: Firefox requires
+    // transient activation before presenting its temporary Paste prompt.
+    reading = navigator.clipboard.readText();
   } catch (_) {
-    setStatus("Paste unavailable — confirm Firefox's Paste prompt or use Ctrl+V", "error");
+    clipboardFailure(target, pasteError);
+    return;
   }
-});
+  Promise.resolve(reading).then(text => {
+    if (targetIsCurrent(target) && typeof text === "string" && text.length) {
+      target.terminal.paste(text);
+    }
+  }).catch(() => clipboardFailure(target, pasteError));
+}
+function copySelection() {
+  const target = clipboardTarget();
+  if (!target) return;
+  const selected = target.terminal.getSelection();
+  if (!selected) return;
+  let writing;
+  try {
+    writing = navigator.clipboard.writeText(selected);
+  } catch (_) {
+    clipboardFailure(target, "Clipboard copy was blocked by Firefox");
+    return;
+  }
+  Promise.resolve(writing).catch(() =>
+    clipboardFailure(target, "Clipboard copy was blocked by Firefox"));
+}
+$("copy").addEventListener("click", copySelection);
+$("paste").addEventListener("click", pasteFromClipboard);
 function handleTerminalKey(e) {
   if (e.type !== "keydown" || !e.ctrlKey || !e.shiftKey) return true;
   if (e.code === "KeyC" && term.hasSelection()) {
-    navigator.clipboard.writeText(term.getSelection()).catch(() => {});
+    copySelection();
     return false;
   }
-  if (e.code === "KeyV") {
-    const currentGeneration = generation;
-    navigator.clipboard.readText().then((s) => {
-      if (running && currentGeneration === generation) term.paste(s);
-    }).catch(() => {
-      setStatus("Paste unavailable — confirm Firefox's Paste prompt or use Ctrl+V", "error");
-    });
+  if (e.code === "KeyV" && running) {
+    pasteFromClipboard();
     return false;
   }
   return true;
