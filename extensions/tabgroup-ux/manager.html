@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tab Groups Enhanced — Manager</title>
+  <link rel="stylesheet" href="manager.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="eyebrow">chromofoxEXT · Firefox only</span><h1>Tab Groups Enhanced</h1>
+      <p>Native group membership controls and local colour studio.</p></div>
+    <button id="refresh" type="button">Refresh groups</button>
+  </header>
+  <aside class="notice"><strong>Phase A boundary:</strong> Firefox's native tab strip supports nine named group colours. Custom gradients and patterns are saved and previewed here; applying them to the tab strip, hiding X buttons and adding bookend anchors belong to Phase B. Locks are best-effort <em>after</em> the original drag.</aside>
+  <div class="global-settings">
+    <label><input type="checkbox" id="paused"> Pause membership protection</label>
+    <label><input type="checkbox" id="default-lock"> Lock newly created groups by default</label>
+    <span id="status" role="status" aria-live="polite">Loading…</span>
+  </div>
+  <main class="layout">
+    <section class="panel group-panel" aria-label="Tab groups">
+      <h2>Groups</h2><div id="groups" class="group-list"></div>
+      <small>Group identity follows member tabs through Firefox session restore, not a transient group ID. Private-window groups are not managed.</small>
+    </section>
+    <section class="panel editor-panel" id="editor" aria-label="Selected group editor" hidden>
+      <div class="editor-title">
+        <div><span class="eyebrow" id="group-meta"></span><h2 id="group-title">Group</h2></div>
+        <label><input type="checkbox" id="lock"> Lock membership</label>
+      </div>
+      <label class="field">Native group title <input id="rename" type="text" maxlength="100" autocomplete="off"></label>
+      <button type="button" id="save-name">Rename group</button>
+      <div class="section-heading"><h3>Appearance</h3><span class="eyebrow">Local preview + native named colour</span></div>
+      <div id="preview" class="preview" role="img" aria-label="Pattern preview">Group preview</div>
+      <div class="controls">
+        <label class="field">Pattern <select id="mode"><option value="solid">Solid</option><option value="gradient">Linear gradient</option><option value="bands">Linear bands / stripes</option><option value="lut">256-colour LUT</option></select></label>
+        <label class="field">Firefox native colour <select id="native-colour"><option value="auto">Auto — closest named colour</option><option value="blue">Blue</option><option value="cyan">Cyan</option><option value="grey">Grey</option><option value="green">Green</option><option value="orange">Orange</option><option value="pink">Pink</option><option value="purple">Purple</option><option value="red">Red</option><option value="yellow">Yellow</option></select></label>
+        <label class="field">Angle <input id="angle" type="number" min="0" max="360" step="1"></label>
+        <label class="field">Bands <input id="bands" type="number" min="2" max="32" step="1"></label>
+      </div>
+      <div class="section-heading"><h3>Colour stops</h3><button id="add-stop" type="button">Add stop</button></div>
+      <div id="stops" class="stops"></div>
+      <div class="section-heading"><h3>Presets</h3></div>
+      <div class="presets" id="presets"></div>
+      <div class="section-heading">
+        <h3>256-colour lookup table</h3>
+        <button id="build-lut" type="button">Rebuild from stops</button>
+      </div>
+      <p class="help">PlasmaTerm-inspired editor. Each square is an editable 6-digit RGB value. Click a field to edit; paste 256 RGB values into the bulk field below to replace the entire LUT.</p>
+      <div class="randomise">
+        <label class="field">Randomisation scale <input type="range" id="random-scale" min="0" max="100" value="25"></label>
+        <output id="random-value">25%</output><button type="button" id="randomise">Randomise LUT</button>
+      </div>
+      <div class="lut-grid" id="lut-grid" aria-label="256-colour LUT grid"></div>
+      <label class="field">LUT import / export (256 RGB hex values)
+        <textarea rows="5" id="bulk" spellcheck="false" placeholder="Paste 256 six-digit RGB colours separated by spaces or commas"></textarea>
+      </label>
+      <div class="toolbar"><button id="import-lut" type="button">Import 256 colours</button><button id="export-lut" type="button">Export to text field</button></div>
+      <div class="section-heading"><h3>Appearance JSON</h3></div>
+      <div class="toolbar"><button id="export-json" type="button">Export JSON</button><button id="import-json" type="button">Import JSON from field</button></div>
+      <textarea rows="4" id="json" spellcheck="false" aria-label="Appearance JSON"></textarea>
+      <div class="actions"><button id="save-appearance" class="primary" type="button">Save appearance</button><button id="discard" type="button">Discard changes</button><span id="dirty" role="status"></span></div>
+    </section>
+    <section class="panel" id="empty-editor"><h2>Select a group</h2><p>Use the native Firefox tab strip to create a group. Then select it here to configure membership and colours.</p></section>
+  </main>
+  <footer>Everything stays local to Firefox. No webpage access, telemetry, cloud service or native companion is required for Phase A.</footer>
+  <script src="src/core.js"></script>
+  <script src="manager.js"></script>
+</body>
+</html>
