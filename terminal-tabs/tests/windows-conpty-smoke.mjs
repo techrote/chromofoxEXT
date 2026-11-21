@@ -8,7 +8,7 @@ const exe = resolve("dist/native/chromofox_terminal_host.exe");
 
 function session(profile, expression) {
   return new Promise((resolveTest, rejectTest) => {
-    const child = spawn(exe, [], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, CHROMOFOX_TERM_DEBUG: "1"} });
+    const child = spawn(exe, [], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, CHROMOFOX_TERM_DEBUG: "1", CHROMOFOX_TERM_DIAG_BARE_CHILD: "1"} });
     let received = Buffer.alloc(0);
     let output = "";
     let errors = "";

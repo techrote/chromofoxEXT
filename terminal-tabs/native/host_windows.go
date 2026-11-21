@@ -184,17 +184,24 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   var cwd *uint16
   if home!="" {cwd,_=syscall.UTF16PtrFromString(home)}
   pi:=syscall.ProcessInformation{}
+  // Research-only A/B switch, enabled exclusively by explicit diagnostic env.
+  // This is temporary evidence code and must not ship to end users.
+  bare := os.Getenv("CHROMOFOX_TERM_DEBUG")=="1" && os.Getenv("CHROMOFOX_TERM_DIAG_BARE_CHILD")=="1"
+  creationFlags := uint32(extendedStartupInfoPresent | createSuspended)
+  if bare { creationFlags=extendedStartupInfoPresent; stage("DIAGNOSTIC: no CREATE_SUSPENDED and no job assignment") }
   stage("CreateProcess begin")
-  err=syscall.CreateProcess(app,cmdLine,nil,nil,false,extendedStartupInfoPresent|createSuspended,nil,cwd,&si.StartupInfo,&pi)
+  err=syscall.CreateProcess(app,cmdLine,nil,nil,false,creationFlags,nil,cwd,&si.StartupInfo,&pi)
   stage("CreateProcess returned")
   runtime.KeepAlive(buf)
   if err!=nil{return nil,fmt.Errorf("create terminal process: %w",err)}
   process=pi.Process
   defer syscall.CloseHandle(pi.Thread)
-  stage("assign job begin")
-  if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
-  stage("assign job returned")
-  if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)} else {stage(fmt.Sprintf("ResumeThread previous suspend count %d",r))}
+  if !bare {
+    stage("assign job begin")
+    if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
+    stage("assign job returned")
+    if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)} else {stage(fmt.Sprintf("ResumeThread previous suspend count %d",r))}
+  }
 
   s=&session{
     in:os.NewFile(uintptr(inWrite),"conpty-input"),
