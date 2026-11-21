@@ -151,6 +151,126 @@ def additional_layout_regressions(browser):
     assert page.evaluate('window.sent') == 0 and len(page.evaluate('window._confirmMessages')) == 2
     page.close()
 
+    # Independent composers must be resolved per event target. Earlier editor
+    # precedes main composer in DOM; neither Send click nor form may route to it.
+    multi_html = '''<!doctype html><html><body><aside><button id="sidebar-high"
+      data-testid="model-switcher-dropdown-button">High</button></aside><main>
+      <div data-testid="composer" id="edit-composer">
+        <button data-testid="model-switcher-dropdown-button">High</button>
+        <form id="edit-form"><textarea name="prompt-textarea" id="edit-draft">Edit draft</textarea></form>
+        <button id="edit-send" aria-label="Send">Send</button>
+      </div>
+      <div data-testid="composer" id="main-composer">
+        <div role="combobox" id="active-model">Pro Extended</div>
+        <form id="main-form"><div class="ProseMirror" contenteditable="true" id="main-draft">Main draft</div></form>
+        <button id="main-send" aria-label="Send">Send</button>
+      </div>
+      </main></body></html>'''
+    multi_app = '''window.mainSent=0;window.editSent=0;
+      document.querySelector('#main-send').onclick=()=>document.querySelector('#main-form').requestSubmit();
+      document.querySelector('#edit-send').onclick=()=>document.querySelector('#edit-form').requestSubmit();
+      document.querySelector('#main-form').onsubmit=e=>{e.preventDefault();window.mainSent++};
+      document.querySelector('#edit-form').onsubmit=e=>{e.preventDefault();window.editSent++};void 0;'''
+    page = new_page(browser, multi_html, multi_app)
+    check = page.evaluate('''() => {
+      const L=ChromofoxProSendLogic;
+      const b=document.querySelector('#main-send');
+      const f=document.querySelector('#main-form');
+      const e=document.querySelector('#main-draft');
+      const r=L.composerRoot(document,b);
+      return {root:r?.id, form:L.isComposerForm(f,document),
+        send:L.isSendButton(b,document), enter:L.closestEditor(e)===e,
+        model:L.selectedMode(document,r).mode,
+        sidebar:L.selectedMode(document,L.composerRoot(document,document.querySelector('#edit-send'))).mode};
+    }''')
+    assert check=={'root':'main-composer','form':True,'send':True,'enter':True,
+                    'model':'pro','sidebar':'non-pro'}, check
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==0
+    assert page.locator('#main-draft').inner_text()=='Main draft'
+    assert len(page.evaluate('window._confirmMessages'))==1
+    # Another composer is genuinely High and must not inherit the Pro approval.
+    page.click('#edit-send')
+    assert page.evaluate('window.editSent')==1
+    assert len(page.evaluate('window._confirmMessages'))==1
+    page.evaluate('window._confirmResult=true')
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==1
+    assert len(page.evaluate('window._confirmMessages'))==2, page.evaluate('window._confirmMessages')
+    page.locator('#main-draft').focus()
+    page.keyboard.press('Enter')
+    assert len(page.evaluate('window._confirmMessages'))==3, 'Enter must target focused second editor'
+    page.evaluate('window._confirmResult=false')
+    page.wait_for_timeout(450)  # Existing Enter approval's one-shot window has expired.
+    page.locator('#main-form').evaluate('(form)=>form.requestSubmit()')
+    assert page.evaluate('window.mainSent')==1
+    assert len(page.evaluate('window._confirmMessages'))==4, 'Direct form submit requires own confirmation'
+    # Change Pro to unrecognised model; unrelated visible High may not suppress.
+    page.evaluate('document.querySelector("#active-model").textContent="Unrecognised Next Model"')
+    assert page.evaluate('''() => ChromofoxProSendLogic.selectedMode(document,
+      ChromofoxProSendLogic.composerRoot(document,document.querySelector('#main-send'))).mode''')=='unknown'
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==1
+    assert 'cannot verify' in page.evaluate('window._confirmMessages[4]')
+    # The user can opt out of unknown-model warnings, never automatically for High elsewhere.
+    page.evaluate('''() => {
+      window._settings.protectUnknown=false;
+      for(const cb of window._changeListeners) cb({protectUnknown:{newValue:false}},'local');
+    }''')
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==2
+    assert len(page.evaluate('window._confirmMessages'))==5
+    page.close()
+
+    # Two unnamed form+external-button shells: no global editor pick is allowed.
+    unnamed_html = '''<!doctype html><html><body><main>
+      <section id="edit-shell"><form id="edit-form"><textarea name="prompt-textarea">Edit</textarea></form>
+        <button id="edit-send" aria-label="Send">Send</button></section>
+      <section id="main-shell"><form id="main-form"><textarea name="prompt-textarea">New</textarea></form>
+        <button id="main-send" aria-label="Send">Send</button></section>
+      </main></body></html>'''
+    page = new_page(browser,unnamed_html,'''
+      window.mainSent=0;
+      document.querySelector('#main-send').onclick=()=>document.querySelector('#main-form').requestSubmit();
+      document.querySelector('#main-form').onsubmit=e=>{e.preventDefault();window.mainSent++};void 0;
+    ''')
+    assert page.evaluate('''() => {
+      const L=ChromofoxProSendLogic;
+      return L.composerRoot(document,document.querySelector('#main-send'))?.id==='main-shell' &&
+        L.composerRoot(document,document.querySelector('#main-form'))?.id==='main-shell' &&
+        L.isSendButton(document.querySelector('#main-send'),document) &&
+        L.isComposerForm(document.querySelector('#main-form'),document);
+    }''')
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==0
+    assert len(page.evaluate('window._confirmMessages'))==1
+    page.evaluate('window._confirmResult=true')
+    page.click('#main-send')
+    assert page.evaluate('window.mainSent')==1
+    assert len(page.evaluate('window._confirmMessages'))==2
+    page.close()
+
+    # A header selector may contribute only with an explicit association to
+    # this composer; another visible High with no association is irrelevant.
+    linked_html = '''<!doctype html><html><body>
+      <header><button data-testid="model-switcher-button">High</button>
+      <button data-testid="model-switcher-dropdown-button" aria-controls="main-composer">Pro Standard</button>
+      </header><main><div data-testid="composer" id="main-composer">
+        <textarea name="prompt-textarea">Draft</textarea>
+        <button id="send" aria-label="Send">Send</button>
+      </div></main></body></html>'''
+    page = new_page(browser,linked_html,'window.sent=0; document.querySelector("#send").onclick=()=>window.sent++; void 0;')
+    assert page.evaluate('''() => {
+       const L=ChromofoxProSendLogic;
+       return L.selectedMode(document,L.composerRoot(document,document.querySelector('#send'))).mode;
+    }''')=='pro'
+    page.click('#send')
+    assert page.evaluate('window.sent')==0
+    assert len(page.evaluate('window._confirmMessages'))==1
+    page.close()
+
+    print('PASS: two active composers, independent approvals, unrelated visible model controls, unnamed paired forms')
+
     print('PASS: alternate textarea/ProseMirror/button layouts, JS sends, external requestSubmit, hidden/stale/ambiguous models')
 
 def main():

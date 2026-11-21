@@ -16,11 +16,19 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
-HTML = '''<!doctype html><html lang="en"><body><main><div data-testid="composer">
-<button data-testid="model-switcher-dropdown-button">Pro</button>
+HTML = '''<!doctype html><html lang="en"><body>
+<aside><button data-testid="model-switcher-dropdown-button">High</button></aside>
+<main><div id="edit-composer" data-testid="composer">
+<button data-testid="model-switcher-dropdown-button">High</button>
+<form id="edit-form"><textarea id="edit-draft" name="prompt-textarea">Edit draft</textarea></form>
+<button type="button" id="edit-send" aria-label="Send">Send</button>
+</div><div id="main-composer" data-testid="composer">
+<div role="combobox" id="active-model">Pro Extended</div>
 <form id="chat-form"><textarea name="prompt-textarea" id="draft">Draft survives cancellation</textarea></form>
 <button type="button" id="composer-submit-button" aria-label="Send">Send</button>
-</div></main><script>window.sent=0;
+</div></main><script>window.sent=0;window.editSent=0;
+document.querySelector('#edit-send').addEventListener('click',()=>document.querySelector('#edit-form').requestSubmit());
+document.querySelector('#edit-form').addEventListener('submit',e=>{e.preventDefault();window.editSent++;});
 document.getElementById('composer-submit-button').addEventListener('click',()=>document.getElementById('chat-form').requestSubmit());
 document.getElementById('chat-form').addEventListener('submit',e=>{e.preventDefault();window.sent++;});
 </script></body></html>'''
@@ -50,7 +58,10 @@ def isolated_world_state(cdp, contexts):
                 'expression':'''JSON.stringify({
                     installed:Boolean(globalThis.__chromofoxProSendGuardInstalled),
                     logicLoaded:Boolean(globalThis.ChromofoxProSendLogic),
-                    model:globalThis.ChromofoxProSendLogic?.selectedMode(document),
+                    model:globalThis.ChromofoxProSendLogic?.selectedMode(document,globalThis.ChromofoxProSendLogic?.composerRoot(document,document.querySelector('#composer-submit-button'))),
+                    mainComposer:globalThis.ChromofoxProSendLogic?.composerRoot(document,document.querySelector('#composer-submit-button'))?.id,
+                    editRecognised:globalThis.ChromofoxProSendLogic?.isSendButton(document.querySelector('#edit-send'),document),
+                    formRecognised:globalThis.ChromofoxProSendLogic?.isComposerForm(document.querySelector('#chat-form'),document),
                     sendRecognised:globalThis.ChromofoxProSendLogic?.isSendButton(document.querySelector('#composer-submit-button'),document)
                 })''',
                 'returnByValue':True
@@ -156,7 +167,7 @@ def main():
                     installed=install_cdp.send('Extensions.loadUnpacked',{'path':str(ext.resolve())})
                     assert installed.get('id'), 'Pro Send Guard failed to register via Extensions.loadUnpacked'
                     print('PACKAGED EXTENSION ID:',installed['id'],flush=True)
-                    decisions=[False,True,True]
+                    decisions=[False,True,True,False]
                     dialogs=[]
                     def on_dialog(dialog):
                         assert dialog.type=='confirm',dialog.type
@@ -180,7 +191,12 @@ def main():
                         diagnostics(cdp,contexts,profile)
                         raise AssertionError('No isolated extension execution context was created after bounded installation retries')
                     assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined','Guard marker leaked from isolated world'
-                    assert any('"installed":true' in str(o.get('value')) and '"sendRecognised":true' in str(o.get('value')) for o in isolated),str(isolated)
+                    assert any(
+                        (lambda v: v.get('installed') and v.get('sendRecognised') and
+                         v.get('formRecognised') and v.get('editRecognised') and
+                         v.get('mainComposer')=='main-composer' and
+                         v.get('model',{}).get('mode')=='pro')(json.loads(o.get('value') or '{}'))
+                        for o in isolated),str(isolated)
                     page.click('#composer-submit-button')
                     assert page.evaluate('window.sent')==0,'Cancel did not block requestSubmit: '+repr(dialogs)
                     assert page.locator('#draft').input_value()=='Draft survives cancellation'
@@ -190,8 +206,16 @@ def main():
                     assert len(dialogs)==2,'Duplicate confirmation for single send'
                     page.click('#composer-submit-button')
                     assert page.evaluate('window.sent')==2
-                    assert len(dialogs)==3 and not decisions,'New gesture failed to reprompt'
-                    print('PASS: packaged Chromium MV3 isolated document_start, native confirm, cancel/approve/repeat/requestSubmit')
+                    assert len(dialogs)==3 and len(decisions)==1,'New gesture failed to reprompt'
+                    page.click('#edit-send')
+                    assert page.evaluate('window.editSent')==1,'Unrelated High edit composer must remain separately routable'
+                    assert len(dialogs)==3,'A High edit composer cannot borrow a Pro confirmation'
+                    page.evaluate("document.querySelector('#active-model').textContent='Unrecognised Next Model'")
+                    page.click('#composer-submit-button')
+                    assert page.evaluate('window.sent')==2,'Unrecognised active model must not be suppressed by unrelated High'
+                    assert len(dialogs)==4 and not decisions,'Unknown selector should confirm'
+                    assert 'cannot verify' in dialogs[3].lower(),dialogs[3]
+                    print('PASS: packaged Chromium MV3 isolated document_start, multi-composer scoping, unrelated High, native confirm, cancel/approve/repeat/requestSubmit')
                 finally:browser.close()
         finally:server.shutdown();thread.join(timeout=3)
 

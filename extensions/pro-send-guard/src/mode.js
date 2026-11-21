@@ -2,8 +2,6 @@
 (() => {
   'use strict';
 
-  // Specific, current ChatGPT selectors first; conservative fallbacks only within
-  // a visible composer. The ProseMirror and named-textarea variants have no role/testid.
   const EDITOR = [
     '#prompt-textarea', '[data-testid="prompt-textarea"]',
     '[data-testid="composer-input"]', 'textarea[name="prompt-textarea"]',
@@ -25,7 +23,8 @@
     'button[aria-label*="current model" i]',
     'button[aria-label*="model selector" i]',
     'button[aria-label*="thinking effort" i]',
-    'button[aria-label*="reasoning effort" i]'
+    'button[aria-label*="reasoning effort" i]',
+    '[role="combobox"]'
   ].join(', ');
   const SEND_CONTROL = [
     'button#composer-submit-button',
@@ -48,10 +47,10 @@
 
   function normalize(value) { return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 100); }
   function classify(label) {
-    const text = normalize(label);
-    if (!text || PROMOTIONAL.test(text)) return 'unknown';
-    if (PRO.test(text)) return 'pro';
-    if (NON_PRO.test(text)) return 'non-pro';
+    const value = normalize(label);
+    if (!value || PROMOTIONAL.test(value)) return 'unknown';
+    if (PRO.test(value)) return 'pro';
+    if (NON_PRO.test(value)) return 'non-pro';
     return 'unknown';
   }
 
@@ -64,49 +63,105 @@
       const style = item.ownerDocument.defaultView?.getComputedStyle(item);
       if (style && (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || Number(style.opacity) === 0)) return false;
     }
-    // CSS display:none on a parent and zero-size retired controls must not count.
-    return node.getClientRects().length > 0 && node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0;
+    const bounds = node.getBoundingClientRect();
+    return node.getClientRects().length > 0 && bounds.width > 0 && bounds.height > 0;
+  }
+
+  function sendControl(node) {
+    return !!node && (node.matches(SEND_CONTROL) || normalize(node.innerText).toLowerCase() === 'send');
+  }
+
+  function viableEditor(node) {
+    if (!node || !node.matches?.(GENERIC_EDITOR) || !isVisibleActive(node)) return false;
+    if (node.matches(EDITOR)) return true;
+    // Generic editors must belong to a recognised composer, or a form with a
+    // genuine Send control. Never reinterpret a transcript/code block as editor.
+    if (node.closest(COMPOSER)) return true;
+    const form = node.closest('form');
+    return !!form && !!form.querySelector(SEND_CONTROL);
+  }
+
+  function visibleEditors(scope) {
+    return Array.from(scope.querySelectorAll(GENERIC_EDITOR)).filter(viableEditor);
   }
 
   function editor(doc) {
-    const nodes = Array.from(doc.querySelectorAll(EDITOR));
-    const identified = nodes.filter(isVisibleActive);
+    // Legacy no-target convenience for tests/UI diagnostics. Submission logic
+    // MUST use the event target instead of whichever editor appears first.
     const active = doc.activeElement;
-    // The active, visible composer editor is preferable to any retired duplicate.
-    const focused = identified.find(node => node === active || node.contains(active));
-    if (focused) return focused;
-    const inComposer = identified.find(node => node.closest(COMPOSER));
-    if (inComposer) return inComposer;
-    const inMain = identified.find(node => node.closest('main, [role="main"]'));
-    if (inMain) return inMain;
-    if (identified.length) return identified[0];
-
-    // Only accept a generic editor when its visible ancestry looks like a real
-    // composer. Never treat a transcript/code block as the message editor.
-    const generic = Array.from(doc.querySelectorAll(GENERIC_EDITOR)).filter(isVisibleActive);
-    return generic.find(node => node.closest(COMPOSER) ||
-      (node.closest('form') && node.closest('form').querySelector('button[type="submit"], #composer-submit-button, [aria-label="Send" i]'))) || null;
+    const focus = active?.closest?.(GENERIC_EDITOR);
+    if (viableEditor(focus)) return focus;
+    const editors = visibleEditors(doc);
+    return editors.find(node => node.closest(COMPOSER)) || editors.find(node => node.closest('main, [role="main"]')) || editors[0] || null;
   }
 
-  function composerRoot(doc) {
-    const input = editor(doc);
-    if (!input) return null;
-    const identified = input.closest(COMPOSER);
-    if (identified) return identified;
+  function editorFromTarget(node) {
+    if (!node || node.nodeType !== 1) return null;
+    const result = node.closest(GENERIC_EDITOR);
+    return viableEditor(result) ? result : null;
+  }
+
+  function rootFromEditor(input) {
+    if (!viableEditor(input)) return null;
+    const named = input.closest(COMPOSER);
+    // A broad named shell may contain an inline edit form AND the new-message
+    // editor. Never give two editors the same approval token by accident.
+    if (named && visibleEditors(named).length === 1) return named;
     const form = input.closest('form');
-    // A Send button can be a sibling of the form, and requestSubmit() may be
-    // called from that sibling. Use the enclosing shell consistently.
-    if (form?.parentElement && !['MAIN', 'BODY', 'HTML'].includes(form.parentElement.tagName)) return form.parentElement;
-    if (form) return form;
+    if (form) {
+      const shell = form.parentElement;
+      // Share a root with a sibling Send button only when this shell owns
+      // exactly one visible editor. Never combine two independently edited forms.
+      if (shell && !['MAIN', 'BODY', 'HTML'].includes(shell.tagName) &&
+          visibleEditors(shell).length === 1 &&
+          Array.from(shell.querySelectorAll('button, [role="button"]')).some(sendControl)) return shell;
+      return form;
+    }
     let parent = input.parentElement;
-    for (let i = 0; parent && i < 7 && !['MAIN', 'BODY', 'HTML'].includes(parent.tagName); i++, parent = parent.parentElement) {
-      if (parent.querySelector(SEND_CONTROL)) return parent;
+    for (let depth = 0; parent && depth < 7 && !['MAIN', 'BODY', 'HTML'].includes(parent.tagName); depth++, parent = parent.parentElement) {
+      if (visibleEditors(parent).length === 1 &&
+          Array.from(parent.querySelectorAll('button, [role="button"]')).some(sendControl)) return parent;
     }
     return input.parentElement;
   }
 
+  function rootFromForm(form) {
+    if (!form?.matches?.('form')) return null;
+    const editors = visibleEditors(form);
+    if (editors.length === 1) return rootFromEditor(editors[0]);
+    if (editors.length > 1) return form; // Ambiguous selection => unknown; never select another composer.
+    const named = form.closest(COMPOSER);
+    if (named && visibleEditors(named).length === 1) return named;
+    return null;
+  }
+
+  function rootFromButton(button) {
+    if (!button || !isVisibleActive(button) || !sendControl(button)) return null;
+    const named = button.closest(COMPOSER);
+    if (named && visibleEditors(named).length === 1) return named;
+    const form = button.form || button.closest('form');
+    if (form) return rootFromForm(form);
+    let parent = button.parentElement;
+    for (let depth = 0; parent && depth < 7 && !['MAIN', 'BODY', 'HTML'].includes(parent.tagName); depth++, parent = parent.parentElement) {
+      if (visibleEditors(parent).length === 1) return rootFromEditor(visibleEditors(parent)[0]);
+    }
+    return null;
+  }
+
+  function composerRoot(doc, target = null) {
+    if (!target) return rootFromEditor(editor(doc));
+    if (!target.isConnected || target.ownerDocument !== doc) return null;
+    if (target.matches?.('form')) return rootFromForm(target);
+    const input = editorFromTarget(target);
+    if (input) return rootFromEditor(input);
+    const button = target.closest?.('button, [role="button"]');
+    if (button) return rootFromButton(button);
+    const named = target.closest?.(COMPOSER);
+    return named && visibleEditors(named).length ? named : null;
+  }
+
   function readableLabels(node) {
-    // Read only short labels on model-picker controls, never the user's prompt.
+    // Small model-control labels only; never inspect prompt or transcript text.
     if (!isVisibleActive(node)) return [];
     const labels = [normalize(node.innerText), normalize(node.getAttribute('aria-label')), normalize(node.getAttribute('title'))];
     return [...new Set(labels.filter(Boolean).filter(s => s.length < 90))];
@@ -122,20 +177,40 @@
     });
   }
 
-  function selectedMode(doc) {
-    const root = composerRoot(doc);
-    if (!root) return { mode: 'unknown', label: '' };
-    const candidates = new Map();
-    for (const node of doc.querySelectorAll(MODEL_CONTROLS)) {
-      if (isCandidate(node, true)) candidates.set(node, 3);
+  function selectedMode(doc, root = null) {
+    // A visible model selector elsewhere in the document is NOT evidence for
+    // this composer. In particular, a sidebar's High must never suppress a
+    // confirmation for an unrecognised active Pro picker.
+    if (!root) {
+      // No event target means no authority to pick the first of several
+      // visible composers and call its High label the active selection.
+      const roots = new Set(visibleEditors(doc).map(rootFromEditor).filter(Boolean));
+      if (roots.size > 1) return { mode: 'unknown', label: '' };
     }
-    for (const node of root.querySelectorAll('button, [role="button"]')) {
-      if (!candidates.has(node) && isCandidate(node, false)) candidates.set(node, 1);
+    const composer = root || composerRoot(doc);
+    if (!composer || composer.ownerDocument !== doc || !isVisibleActive(composer)) return { mode: 'unknown', label: '' };
+    if (visibleEditors(composer).length > 1) return { mode: 'unknown', label: '' };
+    const candidates = new Map();
+    for (const node of composer.querySelectorAll(MODEL_CONTROLS)) {
+      if (isCandidate(node, true) && !node.closest(GENERIC_EDITOR)) candidates.set(node, 3);
+    }
+    for (const node of composer.querySelectorAll('button, [role="button"]')) {
+      if (!candidates.has(node) && isCandidate(node, false) && !node.closest(GENERIC_EDITOR)) candidates.set(node, 1);
+    }
+    // Only a deliberately linked external model selector may supply a
+    // non-Pro label. Global visible model controls without provenance are
+    // ignored and hence yield unknown (protective default).
+    if (composer.id) {
+      for (const node of doc.querySelectorAll(MODEL_CONTROLS)) {
+        if (composer.contains(node) || !isCandidate(node, true)) continue;
+        const ids = (node.getAttribute('aria-controls') || '').split(/\s+/);
+        if (ids.includes(composer.id)) candidates.set(node, 2);
+      }
     }
     let pro = null; let nonPro = null; let unknown = false;
     for (const [node, weight] of candidates) {
-      const labels = readableLabels(node).filter(label => !PROMOTIONAL.test(label));
-      if (!labels.length) continue; // Ignore upgrades, plan ads and empty controls.
+      const labels = readableLabels(node).filter(s => !PROMOTIONAL.test(s));
+      if (!labels.length) continue;
       const states = new Set(labels.map(classify));
       if (states.size > 1) { unknown = true; continue; }
       const mode = [...states][0];
@@ -144,32 +219,25 @@
       else if (mode === 'non-pro' && (!nonPro || weight > nonPro.weight)) nonPro = observation;
       else if (mode === 'unknown') unknown = true;
     }
-    // Conflicting or incompletely identified *visible* selection controls must
-    // never be interpreted as a certain non-Pro model.
     if (unknown || (pro && nonPro)) return { mode: 'unknown', label: '' };
     if (pro) return { mode: 'pro', label: pro.label };
     if (nonPro) return { mode: 'non-pro', label: nonPro.label };
     return { mode: 'unknown', label: '' };
   }
 
-  function closestEditor(node) {
-    if (!node || node.nodeType !== 1) return null;
-    const found = node.closest(`${EDITOR}, ${GENERIC_EDITOR}`);
-    return found && isVisibleActive(found) && found === editor(node.ownerDocument) ? found : null;
-  }
+  function closestEditor(node) { return editorFromTarget(node); }
+
   function isSendButton(node, doc) {
-    const button = node && node.nodeType === 1 ? node.closest('button, [role="button"]') : null;
-    if (!button || !isVisibleActive(button)) return false;
-    const root = composerRoot(doc);
-    if (!root || !root.contains(button)) return false;
-    return button.matches(SEND_CONTROL) || normalize(button.innerText).toLowerCase() === 'send';
-  }
-  function isComposerForm(node, doc = node?.ownerDocument) {
-    if (!node || !node.matches?.('form') || !doc) return false;
-    const input = editor(doc);
-    const root = composerRoot(doc);
-    return !!input && !!root && (node.contains(input) || root === node || root.contains(node));
+    const button = node?.nodeType === 1 ? node.closest('button, [role="button"]') : null;
+    return !!button && !!composerRoot(doc, button) && isVisibleActive(button) && sendControl(button);
   }
 
-  globalThis.ChromofoxProSendLogic = Object.freeze({ normalize, classify, selectedMode, editor, composerRoot, closestEditor, isSendButton, isComposerForm, isVisibleActive });
+  function isComposerForm(node, doc = node?.ownerDocument) {
+    return !!node?.matches?.('form') && !!doc && !!composerRoot(doc, node);
+  }
+
+  globalThis.ChromofoxProSendLogic = Object.freeze({
+    normalize, classify, selectedMode, editor, composerRoot, closestEditor,
+    isSendButton, isComposerForm, isVisibleActive
+  });
 })();

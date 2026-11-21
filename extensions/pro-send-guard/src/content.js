@@ -8,7 +8,8 @@
 
   const defaults = { enabled: true, protectUnknown: true };
   const settings = { ...defaults };
-  let approval = null;
+  // One confirmed send is associated with its own composer, never a second editor.
+  const approvals = new WeakMap();
 
   function updateSettings(values) {
     for (const key of Object.keys(defaults)) if (typeof values?.[key] === 'boolean') settings[key] = values[key];
@@ -31,20 +32,20 @@
     event.preventDefault();
     event.stopImmediatePropagation();
   }
-  function contextFor() {
-    // Canonical root: button, editor and form share one identity even when the
-    // Send button is outside its form and calls form.requestSubmit().
-    return L.composerRoot(document);
+  function contextFor(node) {
+    // Event-specific canonical composer, including sibling Send + requestSubmit.
+    return L.composerRoot(document, node);
   }
   function protect(event, context) {
-    if (!settings.enabled) return;
-    const state = L.selectedMode(document);
+    if (!settings.enabled || !context) return;
+    const state = L.selectedMode(document, context);
+    const approval = approvals.get(context);
     if (state.mode === 'non-pro' || (state.mode === 'unknown' && !settings.protectUnknown)) return;
     // A click's browser-native default form submission can run after a microtask checkpoint.
     // Suppress exactly ONE follow-on submit for the same composer; never permit a new
     // trusted keydown or click merely because the previous click was confirmed.
     if (event.type === 'submit' && approval && approval.context === context && performance.now() < approval.expiresAt) {
-      approval = null;
+      approvals.delete(context);
       return;
     }
     if (event.type === 'click' && !event.isTrusted && approval?.source === 'keydown' && approval.context === context && performance.now() < approval.expiresAt) {
@@ -58,14 +59,14 @@
       : 'ChatGPT Pro Send Guard cannot verify the selected model.\n\nSend anyway? This could use a limited Pro-model message.\n\nCancel keeps your draft untouched.';
     let confirmed = false;
     try { confirmed = globalThis.confirm(prompt) === true; } catch (_) { /* Fail closed. */ }
-    if (!confirmed) { approval = null; stop(event); return; }
+    if (!confirmed) { approvals.delete(context); stop(event); return; }
 
     // This token is usable only by the one browser-generated follow-on submit
     // (or an immediate synthetic click triggered by the approved Enter handler).
     // Every distinct trusted click/keydown still requires its own confirmation.
     const token = { context, source: event.type, expiresAt: performance.now() + 400 };
-    approval = token;
-    setTimeout(() => { if (approval === token) approval = null; }, 400);
+    approvals.set(context, token);
+    setTimeout(() => { if (approvals.get(context) === token) approvals.delete(context); }, 400);
   }
 
   // Install at document_start in capture phase: the original trusted event continues
@@ -84,6 +85,6 @@
   }, true);
   window.addEventListener('submit', event => {
     if (!L.isComposerForm(event.target, document)) return;
-    protect(event, contextFor());
+    protect(event, contextFor(event.target));
   }, true);
 })();

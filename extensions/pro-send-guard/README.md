@@ -13,6 +13,13 @@
 
 The detector also covers a named prompt textarea, bare ProseMirror and an external Send button that calls `form.requestSubmit()`. It rejects CSS-hidden, inert and aria-hidden model controls. Conflicting visible model controls resolve to **unknown**, which prompts by default.
 
+### Multiple composers and model provenance
+
+Each Enter, Send click and form submission resolves a **composer from that event target**. An inline edit and the new-message composer receive independent confirmation contexts and cannot borrow one another's one-shot approval. A sibling Send button and its subsequent `form.requestSubmit()` still share one context.
+
+Model evidence is scoped to the **event's composer**, rather than scanning every model control on the page. A control elsewhere counts only when it explicitly links to the composer using `aria-controls`. A visible unrelated **High** control cannot suppress confirmation for an unrecognised active model selector; ambiguous or absent evidence stays **unknown** and prompts by default. The global/no-target diagnostic returns **unknown** if multiple editors are visible. This intentionally favours an extra confirmation over a silent Pro send; it does not assert that all changes to ChatGPT's model-picker DOM can be detected.
+
+
 ### Limits and important caveats
 
 This is DOM-based UI protection, not a browser-level or server-side quota firewall. **ChatGPT can change its markup, event handling or model-selection flow.** A site event handler that ran before the content script, a send path without captured DOM events (voice, special integrations), or server-side model rerouting may evade the guard. **Never assume an unprompted send is guaranteed non-Pro.** The conservative unknown-mode default helps but cannot ensure total coverage. The browser-native confirmation is chosen specifically so the original trusted event can proceed on approval, and a denial cannot accidentally replay it.
@@ -44,4 +51,4 @@ Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → s
 4. Turn off unknown-model protection in the popup and check the fallback difference; turn it back on. Test Shift+Enter and IME composition without a confirmation.
 5. Keep the extension isolated from other chromofoxEXT extensions during acceptance, then check coexistence. Inspect console errors.
 
-**Status:** Draft/HOLD. The offline DOM, Chromium packaged-MV3 and Firefox dialog smoke tests do not establish real Firefox 159 / ChatGPT acceptance. The packaged Chromium test loads unchanged production scripts using a directly served localhost fixture; only a temporary copy of the manifest receives an additional localhost match. No ChatGPT traffic is sent. The Firefox smoke uses document-start-equivalent injected scripts rather than a signed Firefox add-on. Do not merge or mark Ready without owner approval.
+**Status:** Draft/HOLD. The offline DOM, Chromium packaged-MV3 and Firefox dialog smoke tests do not establish real Firefox 159 / ChatGPT acceptance. The packaged Chromium test covers independent visible inline-edit and main composers, alongside unrelated visible model controls; it loads unchanged production scripts using a directly served localhost fixture; only a temporary copy of the manifest receives an additional localhost match. No ChatGPT traffic is sent. The Firefox smoke uses document-start-equivalent injected scripts rather than a signed Firefox add-on. Do not merge or mark Ready without owner approval.
