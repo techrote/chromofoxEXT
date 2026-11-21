@@ -349,6 +349,30 @@ def adversarial_fail_open_regressions(browser):
     assert len(page.evaluate('window._confirmMessages'))==4, 'Distinct form submit cannot borrow shared-footer approval'
     page.close()
 
+    # stopPropagation prevents window bubbling, but must NOT preserve a usable
+    # cross-form approval past the original click dispatch. A real site may
+    # stop bubbling during React or custom event handling.
+    stop_app = shared_app + "document.querySelector('#shared-js').addEventListener('click',e=>e.stopPropagation());"
+    page = new_page(browser,shared_html,stop_app)
+    page.evaluate('window._confirmResult=true')
+    page.click('#shared-js')
+    assert page.evaluate('window.sentJS')==1 and len(page.evaluate('window._confirmMessages'))==1
+    page.evaluate('window._confirmResult=false')
+    page.locator('#second-form').evaluate('(f)=>f.requestSubmit()')
+    assert page.evaluate('window.sentForm')==0, 'stopPropagation cannot leak approval into a later direct submit'
+    assert len(page.evaluate('window._confirmMessages'))==2
+    page.close()
+
+    # An approved click that itself triggers a nested requestSubmit remains
+    # one send even if the site deliberately stops propagation.
+    stop_submit_app = shared_app + "document.querySelector('#shared-submit').addEventListener('click',e=>e.stopPropagation());"
+    page = new_page(browser,shared_html,stop_submit_app)
+    page.evaluate('window._confirmResult=true')
+    page.click('#shared-submit')
+    assert page.evaluate('window.sentForm')==1
+    assert len(page.evaluate('window._confirmMessages'))==1, 'Nested submit in stopPropagation click is one gesture'
+    page.close()
+
     # Visible header Pro cannot be overridden by an unrelated local High
     # reasoning-effort widget. A standalone effort label has no model-family
     # authority, and so the default unknown-mode protection must apply.

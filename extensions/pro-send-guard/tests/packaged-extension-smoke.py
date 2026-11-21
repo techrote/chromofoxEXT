@@ -42,8 +42,8 @@ SHARED_HTML = '''<!doctype html><html lang="en"><body><main>
 <button id="shared-submit" aria-label="Send">Send</button></footer>
 </div></main><script>
 window.sharedSent=0;window.formSent=0;
-document.querySelector('#shared-js').addEventListener('click',()=>window.sharedSent++);
-document.querySelector('#shared-submit').addEventListener('click',()=>document.querySelector('#second-form').requestSubmit());
+document.querySelector('#shared-js').addEventListener('click',e=>{e.stopPropagation();window.sharedSent++;});
+document.querySelector('#shared-submit').addEventListener('click',e=>{e.stopPropagation();document.querySelector('#second-form').requestSubmit();});
 document.querySelector('#second-form').addEventListener('submit',e=>{e.preventDefault();window.formSent++;});
 document.querySelector('#first-form').addEventListener('submit',e=>e.preventDefault());
 </script></body></html>'''
@@ -244,7 +244,7 @@ def main():
 
                     # P1-A: one named composer containing two visible forms and
                     # a shared JS-only Send footer. It must NOT silently bypass.
-                    decisions.extend([False, True, True, False, True])
+                    decisions.extend([False, True, False, True, False, True])
                     page.goto(f'http://127.0.0.1:{server.server_port}/shared',wait_until='load')
                     assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined'
                     page.click('#shared-js')
@@ -254,13 +254,18 @@ def main():
                     assert page.locator('#second-draft').input_value()=='Second draft'
                     page.click('#shared-js')
                     assert page.evaluate('window.sharedSent')==1 and len(dialogs)==6
-                    page.click('#shared-submit')
-                    assert page.evaluate('window.formSent')==1 and len(dialogs)==7, 'Shared click/requestSubmit must confirm once'
-                    # A later *distinct* direct submit must not borrow approval.
+                    # The JS-only Send calls stopPropagation(); its approval
+                    # must not leak to a later direct requestSubmit, even within
+                    # the original 400ms token lifetime.
                     page.locator('#second-form').evaluate('(form)=>form.requestSubmit()')
-                    assert page.evaluate('window.formSent')==1 and len(dialogs)==8
+                    assert page.evaluate('window.formSent')==0 and len(dialogs)==7, 'Stopped-bubble click approval leaked across events'
                     page.click('#shared-submit')
-                    assert page.evaluate('window.formSent')==2 and len(dialogs)==9 and not decisions
+                    assert page.evaluate('window.formSent')==1 and len(dialogs)==8, 'Nested stopPropagation click/requestSubmit must confirm once'
+                    # Another direct submit after that click is independent.
+                    page.locator('#second-form').evaluate('(form)=>form.requestSubmit()')
+                    assert page.evaluate('window.formSent')==1 and len(dialogs)==9
+                    page.click('#shared-submit')
+                    assert page.evaluate('window.formSent')==2 and len(dialogs)==10 and not decisions
 
                     # P1-B: visible but UNLINKED header Pro plus in-composer
                     # High reasoning-effort is UNKNOWN, not authoritative non-Pro.
@@ -268,22 +273,22 @@ def main():
                     page.goto(f'http://127.0.0.1:{server.server_port}/effort',wait_until='load')
                     assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined'
                     page.click('#effort-send')
-                    assert page.evaluate('window.effortSent')==0 and len(dialogs)==10
+                    assert page.evaluate('window.effortSent')==0 and len(dialogs)==11
                     assert 'cannot verify' in dialogs[-1].lower(),dialogs[-1]
                     assert page.locator('#effort-draft').input_value()=='Draft stays'
                     page.click('#effort-send')
-                    assert page.evaluate('window.effortSent')==1 and len(dialogs)==11
+                    assert page.evaluate('window.effortSent')==1 and len(dialogs)==12
                     # A genuinely identified non-Pro model picker overrides an
                     # unrelated High effort control without a confirmation.
                     page.evaluate("""() => { const b=document.createElement('button');
                         b.id='local-model';b.dataset.testid='model-switcher-dropdown-button';
                         b.textContent='Instant';document.querySelector('#effort-composer').prepend(b); }""")
                     page.click('#effort-send')
-                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==11
+                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==12
                     page.evaluate("document.querySelector('#local-model').textContent='Pro Extended'")
                     page.click('#effort-send')
-                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==12 and not decisions
-                    print('PASS: packaged Chromium MV3 document_start, ambiguous shared-footer JS sends, model-versus-effort provenance, repeated/cross-form confirmations')
+                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==13 and not decisions
+                    print('PASS: packaged Chromium MV3 document_start, shared-footer stopPropagation/send attribution, effort-vs-model provenance, repeat/cross-form confirmations')
                 finally:browser.close()
         finally:server.shutdown();thread.join(timeout=3)
 
