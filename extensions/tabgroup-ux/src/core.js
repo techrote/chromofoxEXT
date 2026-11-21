@@ -120,7 +120,7 @@
     return winner;
   }
   function identityOf(stamp) {
-    return stamp && typeof stamp.uid === 'string' && /^[a-zA-Z0-9_-]{4,100}$/.test(stamp.uid)
+    return stamp && typeof stamp.uid === 'string' && /^g_[a-zA-Z0-9_-]{8,98}$/.test(stamp.uid)
       && stamp.v === 1 ? stamp.uid : null;
   }
   function resolveIdentity(stamps) {
