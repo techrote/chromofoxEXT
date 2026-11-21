@@ -15,6 +15,7 @@ function session(profile, expression, {expectExit = false, marker = "323", expec
     let found = false;
     let settled = false;
     let exitObserved = false;
+    let visibleOutput = "";
     const timeout = setTimeout(() => finish(new Error(profile + ": timeout; output=" + output.slice(-1000) + "; stderr=" + errors)), 25000);
     child.stderr.on("data", (b) => { errors += b.toString("utf8").slice(0, 1000); });
     function send(obj) {
@@ -56,6 +57,7 @@ function session(profile, expression, {expectExit = false, marker = "323", expec
           // Strip common VT/OSC escapes before matching the actual result.
           // The command echo is "17*19", not "323".
           const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "");
+          visibleOutput = plain;
           if (exitObserved) return finish(new Error(profile + ": received output after exit"));
           if (!found && plain.includes(marker)) {
             found = true;
@@ -65,7 +67,7 @@ function session(profile, expression, {expectExit = false, marker = "323", expec
           if (!expectExit) {
             if (found && Number.isInteger(msg.code)) return finish();
           } else {
-            const lines = (output.match(/line\d+\r?\n/g) || []).length;
+            const lines = (visibleOutput.match(/^line\d+\r?$/gm) || []).length;
             if (found && Number.isInteger(msg.code) && lines >= expectedLines) {
               exitObserved = true;
               setTimeout(() => finish(), 100);
@@ -73,7 +75,7 @@ function session(profile, expression, {expectExit = false, marker = "323", expec
             }
           }
           return finish(new Error(profile + ": exit before full output drain (lines=" +
-            (output.match(/line\d+\r?\n/g) || []).length + ", expected=" + expectedLines +
+            (visibleOutput.match(/^line\d+\r?$/gm) || []).length + ", expected=" + expectedLines +
             ", code=" + msg.code + "); tail=" + output.slice(-600)));
         } else if (msg.type === "error") {
           return finish(new Error(profile + ": native host error: " + msg.message));
