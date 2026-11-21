@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "ChatGPT Pro Send Guard (chromofoxEXT)",
+  "version": "0.1.0",
+  "description": "Confirm before sending ChatGPT Pro messages, protecting limited Pro allowance.",
+  "permissions": ["storage"],
+  "action": { "default_title": "ChatGPT Pro Send Guard", "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
+    "js": ["mode.js", "content.js"],
+    "run_at": "document_start",
+    "all_frames": false
+  }]
+}
