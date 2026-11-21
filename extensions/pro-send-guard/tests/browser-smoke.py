@@ -1,5 +1,6 @@
 """Offline Chromium browser regression. No connection to ChatGPT is made."""
 from pathlib import Path
+import os
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -67,7 +68,10 @@ def state(page):
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, executable_path='/usr/bin/chromium', args=['--no-sandbox'])
+        chrome = os.environ.get('CHROME_BIN') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None)
+        opts = {'headless': True, 'args': ['--no-sandbox']}
+        if chrome: opts['executable_path'] = chrome
+        browser = p.chromium.launch(**opts)
         try:
             page = new_page(browser)
             # Click cancel blocks original submit and retains draft.
