@@ -19,6 +19,7 @@ import (
   "strings"
   "sync"
   "syscall"
+  "time"
   "unsafe"
 )
 
@@ -116,8 +117,13 @@ type session struct {
   process syscall.Handle
   job syscall.Handle
   credits chan struct{}
+  input chan string // 32 x 8 KiB = 256 KiB maximum queued input.
+  outputDone chan struct{}
   done chan struct{}
   once sync.Once
+  pseudoOnce sync.Once
+  outputMu sync.Mutex
+  outputFinal bool
 }
 
 func winCall(proc *syscall.LazyProc, args ...uintptr) (uintptr, error) {
@@ -235,7 +241,8 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
     in:os.NewFile(uintptr(inWrite),"conpty-input"),
     out:os.NewFile(uintptr(outRead),"conpty-output"),
     pseudo:pseudo, process:process,job:job,
-    credits:make(chan struct{},8),done:make(chan struct{}),
+    credits:make(chan struct{},8),input:make(chan string,32),
+    outputDone:make(chan struct{}),done:make(chan struct{}),
   }
   for i:=0;i<cap(s.credits);i++ {s.credits<-struct{}{}}
   success=true
@@ -243,14 +250,17 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   return s,nil
 }
 
+// Closing HPCON must not block the output pump on older Windows versions.
+func (s *session) closePseudo() {
+  s.pseudoOnce.Do(func(){if s.pseudo!=0 {closePseudo.Call(s.pseudo)}})
+}
 func (s *session) close() {
   s.once.Do(func(){
     close(s.done)
-    // Kill-on-close job is the primary child-tree termination mechanism.
     if s.job!=0 {syscall.CloseHandle(s.job)}
     if s.in!=nil {s.in.Close()}
     if s.out!=nil {s.out.Close()}
-    if s.pseudo!=0 {closePseudo.Call(s.pseudo)}
+    s.closePseudo()
     if s.process!=0 {syscall.CloseHandle(s.process)}
   })
 }
@@ -263,27 +273,83 @@ func (s *session) resize(cols,rows int) error {
 func (s *session) acknowledge() {
   select {case s.credits<-struct{}{}: default:}
 }
+// Never write to a child's ConPTY input pipe on the protocol-reader thread.
+func (s *session) queueInput(data string) bool {
+  select {case <-s.done:return false;default:}
+  select {
+  case <-s.done: return false
+  case s.input<-data: return true
+  default: return false
+  }
+}
+// Final exit/error is serialized with data: no data can follow final.
+func (s *session) sendData(w *frameWriter, data string) error {
+  s.outputMu.Lock()
+  defer s.outputMu.Unlock()
+  if s.outputFinal {return io.EOF}
+  return w.send(response{Type:"data",Data:data})
+}
+func (s *session) sendFinal(w *frameWriter, result response) {
+  s.outputMu.Lock()
+  defer s.outputMu.Unlock()
+  if s.outputFinal {return}
+  s.outputFinal=true
+  _=w.send(result)
+}
+func (s *session) streamInput(w *frameWriter) {
+  for {
+    select {
+    case <-s.done: return
+    case data:=<-s.input:
+      if _,err:=io.WriteString(s.in,data);err!=nil {
+        select {case <-s.done:return;default:}
+        s.sendFinal(w,response{Type:"error",Message:"Terminal input pipe closed"})
+        go s.close()
+        return
+      }
+    }
+  }
+}
 func (s *session) streamOutput(w *frameWriter) {
   stage("output pump started")
-  // One 4 KiB frame per renderer credit. No unbounded browser output queue.
+  defer close(s.outputDone)
   buf:=make([]byte,4096)
   for {
     select {case <-s.done: return;case <-s.credits:}
     n,err:=s.out.Read(buf)
     if n>0 {stage(fmt.Sprintf("conpty output %d bytes",n))}
     if n>0 {
-      if e:=w.send(response{Type:"data",Data:base64.StdEncoding.EncodeToString(buf[:n])});e!=nil{return}
+      if e:=s.sendData(w,base64.StdEncoding.EncodeToString(buf[:n]));e!=nil{return}
     } else {s.acknowledge()}
     if err!=nil{return}
   }
 }
 func (s *session) waitExit(w *frameWriter) {
-  if _,err:=syscall.WaitForSingleObject(s.process,infiniteWait);err!=nil {stage("wait on process failed");return}
+  if _,err:=syscall.WaitForSingleObject(s.process,infiniteWait);err!=nil {
+    s.sendFinal(w,response{Type:"error",Message:"Unable to wait for terminal process"})
+    go s.close()
+    return
+  }
   var code uint32
-  if syscall.GetExitCodeProcess(s.process,&code)==nil {
-    stage(fmt.Sprintf("shell exited with code %d",code))
+  if err:=syscall.GetExitCodeProcess(s.process,&code);err!=nil {
+    s.sendFinal(w,response{Type:"error",Message:"Unable to get terminal exit status"})
+    go s.close()
+    return
+  }
+  stage(fmt.Sprintf("shell exited with code %d; draining final output",code))
+  // Windows 2022 ClosePseudoConsole can block waiting for a final frame;
+  // close on a separate goroutine and keep draining concurrently.
+  go s.closePseudo()
+  select {
+  case <-s.outputDone:
     exitCode:=int64(code)
-    _=w.send(response{Type:"exit",Code:&exitCode})
+    s.sendFinal(w,response{Type:"exit",Code:&exitCode})
+    go s.close()
+  case <-time.After(15*time.Second):
+    s.sendFinal(w,response{Type:"error",Message:"ConPTY output drain timed out; session closed"})
+    go s.close()
+  case <-s.done:
+    return
   }
 }
 
@@ -318,13 +384,15 @@ func main() {
       stage("sending started")
       if writer.send(response{Type:"started"})!=nil {return}
       go s.streamOutput(writer)
+      go s.streamInput(writer)
       go s.waitExit(writer)
     case "input":
       if len(msg.Data)>8192 { _=writer.send(response{Type:"error",Message:"Input chunk exceeds 8 KiB"});return }
       if strings.ContainsRune(msg.Data,0) { _=writer.send(response{Type:"error",Message:"NUL input is not supported"});return}
-      stage(fmt.Sprintf("sending %d bytes to ConPTY input",len(msg.Data)))
-      if _,err=io.WriteString(s.in,msg.Data);err!=nil{_ =writer.send(response{Type:"error",Message:"Terminal input pipe closed"});return}
-      stage("ConPTY input write returned")
+      if !s.queueInput(msg.Data) {
+        _=writer.send(response{Type:"error",Message:"Terminal input backlog exceeds 256 KiB; session closed"})
+        return
+      }
     case "resize":
       if err=s.resize(msg.Cols,msg.Rows);err!=nil {_=writer.send(response{Type:"error",Message:err.Error()})}
     case "ack":
