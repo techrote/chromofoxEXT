@@ -44,6 +44,37 @@ var createJob = kernel32.NewProc("CreateJobObjectW")
 var setJobInfo = kernel32.NewProc("SetInformationJobObject")
 var assignJob = kernel32.NewProc("AssignProcessToJobObject")
 var resumeThread = kernel32.NewProc("ResumeThread")
+var getStdHandle = kernel32.NewProc("GetStdHandle")
+var setStdHandle = kernel32.NewProc("SetStdHandle")
+
+const stdInputHandle = uintptr(0xfffffff6)  // DWORD(-10)
+const stdOutputHandle = uintptr(0xfffffff5) // DWORD(-11)
+const stdErrorHandle = uintptr(0xfffffff4)  // DWORD(-12)
+
+// A Firefox native-messaging host has redirected stdin/stdout/stderr.
+// CreateProcess otherwise copies those standard-handle slot values into the
+// ConPTY child, corrupting the binary native messaging stream with shell data.
+// Temporarily clear and restore the process-wide Win32 slots during spawn:
+// ConPTY supplies the child's replacement console standard handles instead.
+// The Go os.Stdin/os.Stdout/os.Stderr File objects retain their own handles.
+// There are no concurrent child spawns: one host process owns one ConPTY.
+func createWithConPTYStdHandles(fn func() error) error {
+  type saved struct {kind uintptr; value uintptr}
+  var slots []saved
+  defer func() {
+    for i:=len(slots)-1;i>=0;i-- {
+      old:=slots[i]
+      setStdHandle.Call(old.kind,old.value)
+    }
+  }()
+  for _,kind:=range []uintptr{stdInputHandle,stdOutputHandle,stdErrorHandle} {
+    value,_,callErr:=getStdHandle.Call(kind)
+    if value==^uintptr(0) {return fmt.Errorf("GetStdHandle(0x%x): %v",kind,callErr)}
+    slots=append(slots,saved{kind:kind,value:value})
+    if _,err:=winCall(setStdHandle,kind,0);err!=nil{return fmt.Errorf("clear std handle before ConPTY creation: %w",err)}
+  }
+  return fn()
+}
 
 // Windows structures must have the C ABI field order and alignment.
 type startupInfoEx struct {
@@ -187,7 +218,9 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   if home!="" {cwd,_=syscall.UTF16PtrFromString(home)}
   pi:=syscall.ProcessInformation{}
   stage("CreateProcess begin")
-  err=syscall.CreateProcess(app,cmdLine,nil,nil,false,extendedStartupInfoPresent|createSuspended,nil,cwd,&si.StartupInfo,&pi)
+  err=createWithConPTYStdHandles(func() error {
+    return syscall.CreateProcess(app,cmdLine,nil,nil,false,extendedStartupInfoPresent|createSuspended,nil,cwd,&si.StartupInfo,&pi)
+  })
   stage("CreateProcess returned")
   runtime.KeepAlive(buf)
   if err!=nil{return nil,fmt.Errorf("create terminal process: %w",err)}
