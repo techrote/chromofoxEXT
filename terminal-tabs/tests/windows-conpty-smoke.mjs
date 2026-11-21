@@ -2,11 +2,10 @@
 // Run on Windows Actions after the Go host build, not on Linux.
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 
 const exe = resolve("dist/native/chromofox_terminal_host.exe");
 
-function session(profile, expression) {
+function session(profile, expression, {expectExit = false, marker = "323", expectedLines = 0} = {}) {
   return new Promise((resolveTest, rejectTest) => {
     const child = spawn(exe, [], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, CHROMOFOX_TERM_DEBUG: "1"} });
     let received = Buffer.alloc(0);
@@ -15,6 +14,7 @@ function session(profile, expression) {
     let started = false;
     let found = false;
     let settled = false;
+    let exitObserved = false;
     const timeout = setTimeout(() => finish(new Error(profile + ": timeout; output=" + output.slice(-1000) + "; stderr=" + errors)), 25000);
     child.stderr.on("data", (b) => { errors += b.toString("utf8").slice(0, 1000); });
     function send(obj) {
@@ -56,13 +56,25 @@ function session(profile, expression) {
           // Strip common VT/OSC escapes before matching the actual result.
           // The command echo is "17*19", not "323".
           const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "");
-          if (!found && /\b323\b/.test(plain)) {
+          if (exitObserved) return finish(new Error(profile + ": received output after exit"));
+          if (!found && plain.includes(marker)) {
             found = true;
-            send({ type: "close" });
+            if (!expectExit) send({ type: "close" });
           }
         } else if (msg.type === "exit") {
-          if (found && Number.isInteger(msg.code)) return finish();
-          return finish(new Error(profile + ": child exited before expected output with code " + msg.code + "; output=" + output.slice(-1000)));
+          if (!expectExit) {
+            if (found && Number.isInteger(msg.code)) return finish();
+          } else {
+            const lines = (output.match(/line\d+\r?\n/g) || []).length;
+            if (found && Number.isInteger(msg.code) && lines >= expectedLines) {
+              exitObserved = true;
+              setTimeout(() => finish(), 100);
+              continue;
+            }
+          }
+          return finish(new Error(profile + ": exit before full output drain (lines=" +
+            (output.match(/line\d+\r?\n/g) || []).length + ", expected=" + expectedLines +
+            ", code=" + msg.code + "); tail=" + output.slice(-600)));
         } else if (msg.type === "error") {
           return finish(new Error(profile + ": native host error: " + msg.message));
         }
@@ -76,6 +88,13 @@ const results = await Promise.all([
   session("cmd", "set /a 17*19"),
   session("powershell", "(17 * 19)")
 ]);
+// Both sessions produce >32 KiB of output and then exit normally.
+// A native 'exit' frame is correct only after every output line is delivered.
+const drained = await Promise.all([
+  session("cmd", 'for /L %i in (1,1,2000) do @echo line%i\recho DRAIN_COMPLETE\rexit', {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000}),
+  session("powershell", '1..2000 | ForEach-Object { "line$_" }\rWrite-Output DRAIN_COMPLETE\rexit', {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000})
+]);
+results.push(...drained);
 for (const result of results) {
   console.log(result.profile + " native ConPTY command/closure PASS");
 }
