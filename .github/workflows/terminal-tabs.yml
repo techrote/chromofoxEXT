@@ -68,6 +68,12 @@ jobs:
           New-Item -ItemType Directory -Force ..\dist\native | Out-Null
           go build -trimpath -ldflags '-s -w' -o ..\dist\native\chromofox_terminal_host.exe .
           if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
+      - name: Exercise two actual ConPTY shells and clean host shutdown
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-conpty-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY integration smoke failed' }
       - name: Rebuild local extension assets
         shell: pwsh
         working-directory: terminal-tabs
