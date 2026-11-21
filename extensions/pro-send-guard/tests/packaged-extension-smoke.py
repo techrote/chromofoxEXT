@@ -109,11 +109,21 @@ def main():
                         assert decisions,'Unexpected extra confirmation'
                         (dialog.accept if decisions.pop(0) else dialog.dismiss)()
                     page.on('dialog',on_dialog)
+                    # Chromium installs unpacked extensions asynchronously at profile
+                    # startup. The first navigation can race registration. Retry
+                    # document loads on the same localhost origin, not production.
                     page.goto(f'http://127.0.0.1:{server.server_port}/',wait_until='load')
                     isolated=isolated_world_state(cdp,contexts)
+                    for attempt in range(1, 7):
+                        if isolated:
+                            break
+                        page.wait_for_timeout(800)
+                        contexts.clear()
+                        page.reload(wait_until='load')
+                        isolated=isolated_world_state(cdp,contexts)
                     if not isolated:
                         diagnostics(cdp,contexts,profile)
-                        raise AssertionError('No isolated extension execution context was created')
+                        raise AssertionError('No isolated extension execution context was created after bounded installation retries')
                     assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined','Guard marker leaked from isolated world'
                     assert any('"installed":true' in str(o.get('value')) and '"sendRecognised":true' in str(o.get('value')) for o in isolated),str(isolated)
                     page.click('#composer-submit-button')
