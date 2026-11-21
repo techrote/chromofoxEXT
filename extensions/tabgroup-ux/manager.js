@@ -214,7 +214,13 @@ $('lock').addEventListener('change', async e => {
 });
 $('save-name').addEventListener('click', async () => {
   const g = current(); if (!g) return;
-  try {state = await ask('rename', {groupId:g.id, title:$('rename').value});renderGroups();loadEditor();status('Group renamed.');}
+  try {
+    state = await ask('rename', {groupId:g.id, title:$('rename').value});
+    renderGroups();
+    $('group-title').textContent = current().title || 'Unnamed group';
+    $('rename').value = current().title;
+    status('Group renamed. Unsaved colour changes, if any, are preserved.');
+  }
   catch (error) {status(String(error.message || error),true);}
 });
 $('mode').addEventListener('change', e => {if (draft) {draft.mode = e.target.value; $('bands').disabled = draft.mode !== 'bands';changed();}});
