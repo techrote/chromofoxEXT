@@ -38,7 +38,7 @@ jobs:
         working-directory: extensions/pro-send-guard
         run: |
           python tests/browser-smoke.py
-          python tests/packaged-extension-smoke.py
+          xvfb-run -a python tests/packaged-extension-smoke.py
   firefox-dialog:
     runs-on: ubuntu-24.04
     steps:

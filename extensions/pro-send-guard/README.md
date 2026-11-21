@@ -28,7 +28,7 @@ cd extensions/pro-send-guard
 node build.mjs
 node --test tests/*.test.mjs
 python tests/browser-smoke.py             # offline DOM fixture tests (Chromium)
-python tests/packaged-extension-smoke.py  # real MV3 isolated injection, offline ChatGPT-origin route
+xvfb-run -a python tests/packaged-extension-smoke.py  # Linux CI: headed Chromium MV3, offline ChatGPT-origin route
 python tests/firefox-dialog-smoke.py      # Firefox native confirm, document-start equivalent
 ```
 

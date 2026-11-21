@@ -1,7 +1,7 @@
 """Offline Chromium MV3 test of the EXACT production package at ChatGPT origin.
 
 Routes fulfill the ChatGPT URL locally; no live site/network access or Pro sends.
-The full Chromium channel is required for actual headless extension loading.
+Run headed under Xvfb in CI to exercise actual extension injection.
 """
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -55,7 +55,7 @@ def main():
         assert manifest['content_scripts'][0]['matches']==['https://chatgpt.com/*','https://chat.openai.com/*']
         with sync_playwright() as p:
             args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
-            opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=True,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
+            opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=False,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
             if os.getenv('CHROME_BIN'):
                 opts['executable_path']=os.environ['CHROME_BIN']
                 del opts['channel']
