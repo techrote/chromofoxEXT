@@ -172,7 +172,13 @@
         catch (error) { log('Cannot release moved tab identity: ' + error); }
       }
       if (!data.settings.paused && rec && rec.locked) {
-        const destination = uidToGroup.get(uid);
+        let destination = uidToGroup.get(uid);
+        if (destination && destination.windowId === tab.windowId) {
+          // The last member may have left and Firefox may already have
+          // deleted its old group. Reconstitute rather than targeting a dead ID.
+          try { await b.tabGroups.get(destination.id); }
+          catch (error) { destination = null; }
+        }
         if (destination && destination.windowId !== tab.windowId) {
           // Cross-window transfers are intentional enough to be left alone.
           // Do not steal a tab back into its old window or poison another group.
