@@ -80,6 +80,12 @@ jobs:
         run: |
           node tests/windows-tree-cleanup.mjs
           if ($LASTEXITCODE -ne 0) { throw 'ConPTY descendant process cleanup failed' }
+      - name: Verify backed-up ConPTY input cannot block native Close
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-blocked-input.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY blocked-input close test failed' }
       - name: Rebuild local extension assets
         shell: pwsh
         working-directory: terminal-tabs
