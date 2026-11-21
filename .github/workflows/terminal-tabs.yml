@@ -27,8 +27,7 @@ jobs:
       - name: Build locally bundled terminal renderer
         working-directory: terminal-tabs
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          echo "LOCKFILE_BASE64=$(base64 -w0 package-lock.json)"
+          npm ci --ignore-scripts --no-audit --no-fund
           npm test
           npm run build
           node --check src/extension/background.js
@@ -85,8 +84,8 @@ jobs:
         shell: pwsh
         working-directory: terminal-tabs
         run: |
-          npm install --ignore-scripts --no-audit --no-fund
-          if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
           npm test
           if ($LASTEXITCODE -ne 0) { throw 'JS tests failed' }
           npm run build

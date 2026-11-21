@@ -36,7 +36,7 @@ Requires Go 1.23+, Node 22+ and npm for building; **no Go/Node/.NET prerequisite
 
 ```powershell
 cd terminal-tabs
-npm install --ignore-scripts
+npm ci --ignore-scripts --no-audit --no-fund
 npm test
 npm run build
 cd native
@@ -45,7 +45,7 @@ go vet ./...
 go build -trimpath -o ../dist/native/chromofox_terminal_host.exe .
 ```
 
-The packaged extension is at `dist/extension`; the host executable is `dist/native/chromofox_terminal_host.exe`. The GitHub Actions workflow bundles both with installer scripts. Direct npm dependencies are exact-version pinned; the published CI run/artifact is still the delivery provenance for this PoC.
+The packaged extension is at `dist/extension`; the host executable is `dist/native/chromofox_terminal_host.exe`. The GitHub Actions workflow bundles both with installer scripts. The committed npm lockfile pins the full dependency graph with SHA-512 integrity hashes. CI uses `npm ci` on both Linux and Windows; the published exact-HEAD CI run and artifact remain delivery provenance for this PoC.
 
 ## Manual Windows/Firefox owner acceptance
 
