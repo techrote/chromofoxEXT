@@ -28,7 +28,7 @@ cd extensions/pro-send-guard
 node build.mjs
 node --test tests/*.test.mjs
 python tests/browser-smoke.py             # offline DOM fixture tests (Chromium)
-python tests/packaged-extension-smoke.py  # real MV3 isolated injection, offline localhost
+python tests/packaged-extension-smoke.py  # real MV3 isolated injection, offline ChatGPT-origin route
 python tests/firefox-dialog-smoke.py      # Firefox native confirm, document-start equivalent
 ```
 
@@ -44,4 +44,4 @@ Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → s
 4. Turn off unknown-model protection in the popup and check the fallback difference; turn it back on. Test Shift+Enter and IME composition without a confirmation.
 5. Keep the extension isolated from other chromofoxEXT extensions during acceptance, then check coexistence. Inspect console errors.
 
-**Status:** Draft/HOLD. The offline DOM, Chromium packaged-MV3 and Firefox dialog smoke tests do not establish real Firefox 159 / ChatGPT acceptance. The packaged Chromium test modifies only a temporary test copy of the manifest to admit a localhost fixture; production matches are unchanged. The Firefox smoke uses document-start-equivalent injected scripts rather than a signed Firefox add-on. Do not merge or mark Ready without owner approval.
+**Status:** Draft/HOLD. The offline DOM, Chromium packaged-MV3 and Firefox dialog smoke tests do not establish real Firefox 159 / ChatGPT acceptance. The packaged Chromium test loads the unmodified production manifest and uses an offline route at the exact `chatgpt.com` origin; no ChatGPT traffic is sent. The Firefox smoke uses document-start-equivalent injected scripts rather than a signed Firefox add-on. Do not merge or mark Ready without owner approval.
