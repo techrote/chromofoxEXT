@@ -11,6 +11,8 @@
 - Defaults to confirming **unknown model state** too. The popup lets you disable this fallback if it is too conservative. It also has an enabled toggle.
 - An approved user gesture permits only one same-composer follow-on form submission (within 400 ms), not future independent trusted clicks or key presses. Every new user send requires a separate decision.
 
+The detector also covers a named prompt textarea, bare ProseMirror and an external Send button that calls `form.requestSubmit()`. It rejects CSS-hidden, inert and aria-hidden model controls. Conflicting visible model controls resolve to **unknown**, which prompts by default.
+
 ### Limits and important caveats
 
 This is DOM-based UI protection, not a browser-level or server-side quota firewall. **ChatGPT can change its markup, event handling or model-selection flow.** A site event handler that ran before the content script, a send path without captured DOM events (voice, special integrations), or server-side model rerouting may evade the guard. **Never assume an unprompted send is guaranteed non-Pro.** The conservative unknown-mode default helps but cannot ensure total coverage. The browser-native confirmation is chosen specifically so the original trusted event can proceed on approval, and a denial cannot accidentally replay it.
@@ -25,7 +27,9 @@ Requirements: Node 18+, no npm dependencies.
 cd extensions/pro-send-guard
 node build.mjs
 node --test tests/*.test.mjs
-python tests/browser-smoke.py   # optional: Playwright 1.56 + local Chromium
+python tests/browser-smoke.py             # offline DOM fixture tests (Chromium)
+python tests/packaged-extension-smoke.py  # real MV3 isolated injection, offline localhost
+python tests/firefox-dialog-smoke.py      # Firefox native confirm, document-start equivalent
 ```
 
 Firefox 159: `about:debugging` → **This Firefox** → **Load Temporary Add-on** → pick `dist/firefox/manifest.json`. Open/reload `https://chatgpt.com/` to activate the guard. Temporary add-ons disappear after restarting Firefox.
@@ -40,4 +44,4 @@ Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → s
 4. Turn off unknown-model protection in the popup and check the fallback difference; turn it back on. Test Shift+Enter and IME composition without a confirmation.
 5. Keep the extension isolated from other chromofoxEXT extensions during acceptance, then check coexistence. Inspect console errors.
 
-**Status:** Draft/HOLD; offline browser tests are not a substitute for real Firefox 159 / ChatGPT acceptance. Do not merge or mark Ready without owner approval.
+**Status:** Draft/HOLD. The offline DOM, Chromium packaged-MV3 and Firefox dialog smoke tests do not establish real Firefox 159 / ChatGPT acceptance. The packaged Chromium test modifies only a temporary test copy of the manifest to admit a localhost fixture; production matches are unchanged. The Firefox smoke uses document-start-equivalent injected scripts rather than a signed Firefox add-on. Do not merge or mark Ready without owner approval.

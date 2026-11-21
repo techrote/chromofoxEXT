@@ -52,19 +52,106 @@ void 0;
 '''
 
 
-def new_page(browser):
+def new_page(browser, html=HTML, app=APP):
     page = browser.new_page()
-    page.set_content(HTML)
+    page.set_content(html)
     page.evaluate(SETUP)
     page.add_script_tag(path=str(ROOT / 'src/mode.js'))
     page.add_script_tag(path=str(ROOT / 'src/content.js'))
-    page.evaluate(APP)
+    page.evaluate(app)
     return page
 
 
 def state(page):
     return page.evaluate('({sent:window.sent, draft:document.getElementById("prompt-textarea").textContent, confirmations:window._confirmMessages.slice()})')
 
+
+def additional_layout_regressions(browser):
+    # A sibling Send button invokes JS requestSubmit. Click and submit have
+    # different DOM targets but MUST share precisely one approval.
+    sibling_html = '''<!doctype html><html><body><main>
+      <div id="composer" data-testid="composer">
+        <button id="model" data-testid="model-switcher-dropdown-button">Pro</button>
+        <form id="chat-form"><textarea name="prompt-textarea" id="draft">Draft must stay</textarea></form>
+        <button type="button" id="send" aria-label="Send">Send</button>
+      </div></main></body></html>'''
+    app = '''window.sent=0;
+      document.querySelector('#send').addEventListener('click', () => document.querySelector('form').requestSubmit());
+      document.querySelector('form').addEventListener('submit', e=>{e.preventDefault();window.sent++});'''
+    page = new_page(browser, sibling_html, app)
+    page.click('#send')
+    assert page.evaluate('window.sent') == 0
+    assert len(page.evaluate('window._confirmMessages')) == 1
+    assert page.locator('#draft').input_value() == 'Draft must stay'
+    page.evaluate('window._confirmResult=true')
+    page.click('#send')
+    assert page.evaluate('window.sent') == 1, page.evaluate('window._confirmMessages')
+    assert len(page.evaluate('window._confirmMessages')) == 2, page.evaluate('window._confirmMessages')
+    page.click('#send')
+    assert page.evaluate('window.sent') == 2
+    assert len(page.evaluate('window._confirmMessages')) == 3, 'One prompt per gesture, not per event'
+    page.close()
+
+    # ProseMirror div with no role/testid and a standalone button which sends
+    # only through JS onClick (no native form submit).
+    prose_html = '''<!doctype html><html><body><main>
+      <div data-testid="composer" id="composer">
+        <button data-testid="model-switcher-dropdown-button" id="model">GPT-6 Pro</button>
+        <div class="ProseMirror" contenteditable="true" id="draft">Draft must stay</div>
+        <button type="button" id="composer-submit-button" aria-label="Send">Send</button>
+      </div></main></body></html>'''
+    app = '''window.sent=0;
+      document.getElementById('composer-submit-button').addEventListener('click',()=>{window.sent++;});'''
+    page = new_page(browser, prose_html, app)
+    page.click('#composer-submit-button')
+    assert page.evaluate('window.sent') == 0
+    assert len(page.evaluate('window._confirmMessages')) == 1
+    assert page.locator('#draft').inner_text() == 'Draft must stay'
+    page.evaluate('window._confirmResult = true')
+    page.click('#composer-submit-button')
+    assert page.evaluate('window.sent') == 1
+    page.locator('#draft').focus()
+    page.keyboard.press('Enter')
+    assert len(page.evaluate('window._confirmMessages')) == 3, 'Bare ProseMirror Enter must be covered'
+    page.close()
+
+    # Unlabelled generic textarea is accepted ONLY inside a visible composer.
+    generic_html = '''<!doctype html><html><body><main>
+      <div data-testid="composer"><button data-testid="model-switcher-button">Pro</button>
+      <textarea id="draft">Draft must stay</textarea><button aria-label="Send" id="send">Send</button>
+      </div></main></body></html>'''
+    page = new_page(browser, generic_html, 'window.sent=0; document.querySelector("#send").onclick=()=>window.sent++; void 0;')
+    page.click('#send')
+    assert page.evaluate('window.sent') == 0
+    assert len(page.evaluate('window._confirmMessages')) == 1
+    page.close()
+
+    # Hidden model controls cannot override an unrecognised current model.
+    # CSS visibility, aria-hidden ancestors and inert are disqualifying.
+    hidden_html = '''<!doctype html><html><body><main>
+      <div data-testid="composer">
+        <div style="display:none"><button data-testid="model-switcher-dropdown-button">High</button></div>
+        <div style="visibility:hidden"><button data-testid="reasoning-effort-button">Medium</button></div>
+        <div aria-hidden="true"><button data-testid="model-switcher-button">Instant</button></div>
+        <div inert><button data-testid="model-switcher-dropdown-button">Extra High</button></div>
+        <button id="model" data-testid="other-new-model-picker">Unrecognised New Model</button>
+        <div class="ProseMirror" contenteditable="true">Draft must stay</div>
+        <button id="send" aria-label="Send">Send</button>
+      </div></main></body></html>'''
+    page = new_page(browser, hidden_html, 'window.sent=0;document.querySelector("#send").onclick=()=>window.sent++; void 0;')
+    assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'unknown'
+    page.click('#send')
+    assert page.evaluate('window.sent') == 0
+    assert 'cannot verify' in page.evaluate('window._confirmMessages[0]')
+    page.evaluate('''() => { document.getElementById('model').dataset.testid='model-switcher-dropdown-button'; document.getElementById('model').textContent='Pro'; }''')
+    assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'pro'
+    page.evaluate('''() => { const b=document.createElement('button'); b.dataset.testid='thinking-effort-button';b.textContent='High';document.querySelector('[data-testid="composer"]').prepend(b); }''')
+    assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'unknown', 'Conflicting visible labels are not certainly non-Pro'
+    page.click('#send')
+    assert page.evaluate('window.sent') == 0 and len(page.evaluate('window._confirmMessages')) == 2
+    page.close()
+
+    print('PASS: alternate textarea/ProseMirror/button layouts, JS sends, external requestSubmit, hidden/stale/ambiguous models')
 
 def main():
     with sync_playwright() as p:
@@ -132,6 +219,7 @@ def main():
             page.click('#send')
             assert state(page)['sent'] == 2 and len(state(page)['confirmations']) == 1, state(page)
             page.close()
+            additional_layout_regressions(browser)
             print('PASS: offline Chromium cancel/approve/Enter/Shift+Enter/IME/effort/upsell/unknown/preferences')
         finally:
             browser.close()

@@ -31,8 +31,10 @@
     event.preventDefault();
     event.stopImmediatePropagation();
   }
-  function contextFor(node) {
-    return node?.closest?.('form') || L.composerRoot(document);
+  function contextFor() {
+    // Canonical root: button, editor and form share one identity even when the
+    // Send button is outside its form and calls form.requestSubmit().
+    return L.composerRoot(document);
   }
   function protect(event, context) {
     if (!settings.enabled) return;
@@ -81,7 +83,7 @@
     protect(event, contextFor(event.target));
   }, true);
   window.addEventListener('submit', event => {
-    if (!L.isComposerForm(event.target)) return;
-    protect(event, event.target);
+    if (!L.isComposerForm(event.target, document)) return;
+    protect(event, contextFor());
   }, true);
 })();
