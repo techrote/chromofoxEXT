@@ -55,9 +55,10 @@ export function session(profile, expression, {
       if (code !== 0 || signal) return fail("unexpected host termination (code=" + code +
         ", signal=" + signal + ")");
       if (received.length) return fail("truncated native frame at host shutdown");
-      if (!started || !found || !closeSent) return fail("host closed before successful command/close");
+      if (!started || !found) return fail("host closed before successful command output");
       if (expectExit && !nativeExit) return fail("host closed without native exit frame");
       if (expectExit && !linesComplete()) return fail("host closed without complete output");
+      if (!closeSent) return fail("host closed before protocol Close request");
       finish();
     });
     child.stdout.on("data", chunk => {
