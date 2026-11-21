@@ -210,19 +210,26 @@ function pasteFromClipboard() {
   }).catch(() => clipboardFailure(target, pasteError));
 }
 function copySelection() {
-  const target = clipboardTarget();
-  if (!target) return;
-  const selected = target.terminal.getSelection();
+  // Copy reads the visible xterm buffer, even after End or native exit.
+  // Unlike Paste it does not require a live shell or sessionId.
+  const sourceTerminal = term;
+  if (!sourceTerminal) return;
+  const selected = sourceTerminal.getSelection();
   if (!selected) return;
-  let writing;
+  const copyGeneration = generation;
+  const reportFailure = () => {
+    // A late clipboard rejection must not overwrite a replacement shell.
+    // Still report failures for Copy initiated on the currently visible buffer.
+    if (term === sourceTerminal && generation === copyGeneration) {
+      setStatus("Clipboard copy was blocked by Firefox", "error");
+    }
+  };
   try {
-    writing = navigator.clipboard.writeText(selected);
+    // Keep the write inside the user's click/key handler.
+    Promise.resolve(navigator.clipboard.writeText(selected)).catch(reportFailure);
   } catch (_) {
-    clipboardFailure(target, "Clipboard copy was blocked by Firefox");
-    return;
+    reportFailure();
   }
-  Promise.resolve(writing).catch(() =>
-    clipboardFailure(target, "Clipboard copy was blocked by Firefox"));
 }
 $("copy").addEventListener("click", copySelection);
 $("paste").addEventListener("click", pasteFromClipboard);

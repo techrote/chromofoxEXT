@@ -241,3 +241,78 @@ test("sync Clipboard API failure is reported without corrupting active session",
   assert.match(x.element("status").textContent,/copy was blocked/);
   assert.equal(x.element("stop").disabled,false);
 });
+
+test("Copy button copies selected scrollback after explicit End",async()=>{
+  const written=[];
+  const x=setup({clipboard:{
+    readText:async()=>"",
+    writeText(text){written.push(text);return Promise.resolve();}
+  }});
+  x.element("start").click();
+  x.receive({type:"started"});
+  const stoppedTerminal=x.terminals.at(-1);
+  x.element("stop").click();
+  assert.equal(x.element("stop").disabled,true);
+  stoppedTerminal.selection="output retained after End";
+  x.element("copy").click();
+  await settled();
+  assert.deepEqual(written,["output retained after End"]);
+  assert.equal(x.element("status").textContent,"Session ended");
+});
+
+test("Ctrl+Shift+C copies selected output after normal native exit",async()=>{
+  const written=[];
+  const x=setup({clipboard:{
+    readText:async()=>"",
+    writeText(text){written.push(text);return Promise.resolve();}
+  }});
+  x.element("start").click();
+  x.receive({type:"started"});
+  x.receive({type:"exit",code:0});
+  const stoppedTerminal=x.terminals.at(-1);
+  stoppedTerminal.selection="command output after exit";
+  const handled=stoppedTerminal.onKey({
+    type:"keydown",ctrlKey:true,shiftKey:true,code:"KeyC"
+  });
+  assert.equal(handled,false,"Copy shortcut must still be available after exit");
+  await settled();
+  assert.deepEqual(written,["command output after exit"]);
+  assert.match(x.element("status").textContent,/Process exited/);
+  assert.equal(x.element("stop").disabled,true);
+});
+
+test("late stopped-session Copy rejection cannot change replacement status",async()=>{
+  const pending=deferredClipboard();
+  const copied=[];
+  const x=setup({clipboard:{
+    readText:async()=>"",
+    writeText(text){copied.push(text);return pending.promise;}
+  }});
+  x.element("start").click();
+  x.receive({type:"started"});
+  const stoppedTerminal=x.terminals.at(-1);
+  x.element("stop").click();
+  stoppedTerminal.selection="stopped shell text";
+  x.element("copy").click();
+  assert.deepEqual(copied,["stopped shell text"]);
+  x.element("start").click();
+  x.receive({type:"started"});
+  pending.reject(new Error("NotAllowedError"));
+  await settled();
+  assert.equal(x.element("status").textContent,"Connected · Command Prompt");
+  assert.equal(x.element("stop").disabled,false);
+});
+
+test("Copy rejection on a still-visible stopped buffer is reported",async()=>{
+  const x=setup({clipboard:{
+    readText:async()=>"",
+    writeText(){throw new Error("NotAllowedError");}
+  }});
+  x.element("start").click();
+  x.receive({type:"started"});
+  x.element("stop").click();
+  x.terminals.at(-1).selection="old output";
+  x.element("copy").click();
+  assert.match(x.element("status").textContent,/Clipboard copy was blocked/);
+  assert.equal(x.element("stop").disabled,true);
+});

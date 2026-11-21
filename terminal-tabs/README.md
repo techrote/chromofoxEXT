@@ -58,6 +58,7 @@ Automated JS tests cover both paste entry points, approved/denied clipboard read
 - [ ] Launch Windows PowerShell and CMD simultaneously in two Firefox tabs; each must accept input and display independent output.
 - [ ] Enter and interrupt a long-running command with Ctrl+C, resize and verify readline editing works.
 - [ ] Exercise ANSI colours, Unicode, very large output, and tab switching; confirm Firefox remains responsive.
+- [ ] After End session and after an ordinary shell `exit`, select retained output and verify **Copy** and **Ctrl+Shift+C** still copy it without starting a shell.
 - [ ] In real Firefox 159, test **Paste button** and **Ctrl+Shift+V** separately: approve the transient Paste confirmation (if shown), then cancel it and verify no input; test normal **Ctrl+V** fallback in the focused terminal. Confirm both Copy button and Ctrl+Shift+C on a selection.
 - [ ] With a Paste confirmation still pending, End → Start into another shell, then approve or dismiss the old prompt: neither late success nor rejection may send input to or change the new session's status. Automated tests simulate this; actual Firefox permission UI is not emulated by Node tests.
 - [ ] Exit from a shell after printing more than 32 KiB: verify all output arrives before the exit status. Paste repeatedly into a non-reading shell and verify that End session remains responsive.
