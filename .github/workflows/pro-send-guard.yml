@@ -5,6 +5,7 @@ on:
       - "extensions/pro-send-guard/**"
       - ".github/workflows/pro-send-guard.yml"
   push:
+    branches: [main]
     paths:
       - "extensions/pro-send-guard/**"
       - ".github/workflows/pro-send-guard.yml"

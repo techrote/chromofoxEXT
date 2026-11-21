@@ -1,19 +1,22 @@
-"""Offline Chromium MV3 test of the EXACT production package at ChatGPT origin.
+"""Offline real Chromium MV3 content-script injection regression.
 
-Routes fulfill the ChatGPT URL locally; no live site/network access or Pro sends.
-Run headed under Xvfb in CI to exercise actual extension injection.
+The test copies the production-built package and appends a localhost match
+ONLY to the temporary copy's manifest. Production JS remains unchanged.
+A directly served local HTML document avoids Playwright route-fulfill pitfalls.
+No ChatGPT requests or Pro messages are made.
 """
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Thread
 from playwright.sync_api import sync_playwright
 import json
-import re
 import os
 import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parent.parent
-HTML = '''<!doctype html><html><body><main><div data-testid="composer">
+HTML = '''<!doctype html><html lang="en"><body><main><div data-testid="composer">
 <button data-testid="model-switcher-dropdown-button">Pro</button>
 <form id="chat-form"><textarea name="prompt-textarea" id="draft">Draft survives cancellation</textarea></form>
 <button type="button" id="composer-submit-button" aria-label="Send">Send</button>
@@ -22,83 +25,109 @@ document.getElementById('composer-submit-button').addEventListener('click',()=>d
 document.getElementById('chat-form').addEventListener('submit',e=>{e.preventDefault();window.sent++;});
 </script></body></html>'''
 
+class Fixture(BaseHTTPRequestHandler):
+    def do_GET(self):
+        data=HTML.encode()
+        self.send_response(200)
+        self.send_header('Content-Type','text/html; charset=utf-8')
+        self.send_header('Content-Length',str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+    def log_message(self,fmt,*args):pass
+
 
 def isolated_world_state(cdp, contexts):
-    details = []
+    details=[]
     for ctx in contexts:
-        if not str(ctx.get('origin', '')).startswith('chrome-extension://'):
-            continue
+        if not str(ctx.get('origin','')).startswith('chrome-extension://'):continue
         try:
-            result = cdp.send('Runtime.evaluate', {
-                'contextId': ctx['id'],
-                'expression': '''JSON.stringify({
-                    installed: Boolean(globalThis.__chromofoxProSendGuardInstalled),
-                    logicLoaded: Boolean(globalThis.ChromofoxProSendLogic),
-                    model: globalThis.ChromofoxProSendLogic?.selectedMode(document),
-                    sendRecognised: globalThis.ChromofoxProSendLogic?.isSendButton(document.querySelector('#composer-submit-button'), document)
+            result=cdp.send('Runtime.evaluate',{
+                'contextId':ctx['id'],
+                'expression':'''JSON.stringify({
+                    installed:Boolean(globalThis.__chromofoxProSendGuardInstalled),
+                    logicLoaded:Boolean(globalThis.ChromofoxProSendLogic),
+                    model:globalThis.ChromofoxProSendLogic?.selectedMode(document),
+                    sendRecognised:globalThis.ChromofoxProSendLogic?.isSendButton(document.querySelector('#composer-submit-button'),document)
                 })''',
-                'returnByValue': True
+                'returnByValue':True
             })
-            details.append({'name': ctx.get('name'), 'origin': ctx.get('origin'), 'result': result.get('result',{}).get('value'), 'error': result.get('exceptionDetails',{}).get('text')})
-        except Exception as error:
-            details.append({'origin': ctx.get('origin'), 'error': str(error)[:250]})
+            details.append({'origin':ctx.get('origin'),'value':result.get('result',{}).get('value'),
+                'exception':result.get('exceptionDetails',{}).get('text')})
+        except Exception as err:details.append({'origin':ctx.get('origin'),'error':str(err)[:250]})
     return details
+
+
+def diagnostics(cdp, contexts, profile):
+    print('DEBUG contexts:', [(c.get('name'),c.get('origin')) for c in contexts],flush=True)
+    try:
+        flags=cdp.send('Browser.getBrowserCommandLine').get('arguments',[])
+        print('DEBUG extension flags:',[v for v in flags if any(x in v for x in ['extension','headless','user-data-dir'])],flush=True)
+    except Exception as err:print('DEBUG command line unavailable:',str(err)[:200],flush=True)
+    try:
+        targets=cdp.send('Target.getTargets').get('targetInfos',[])
+        print('DEBUG targets:',[(t.get('type'),t.get('url')) for t in targets if 'extension' in t.get('url','')],flush=True)
+    except Exception as err:print('DEBUG targets unavailable:',str(err)[:200],flush=True)
+    try:
+        pref=json.loads((profile/'Default'/'Preferences').read_text())
+        print('DEBUG registered extension ids:',list(pref.get('extensions',{}).get('settings',{})),flush=True)
+    except Exception as err:print('DEBUG preferences unavailable:',str(err)[:200],flush=True)
 
 
 def main():
     subprocess.run(['node','build.mjs'],cwd=ROOT,check=True,capture_output=True)
-    with TemporaryDirectory(prefix='pro-send-guard-') as temp:
-        ext=Path(temp)/'extension'
-        shutil.copytree(ROOT/'dist'/'chrome',ext)
-        manifest=json.loads((ext/'manifest.json').read_text())
-        assert manifest['content_scripts'][0]['run_at']=='document_start'
-        assert manifest['content_scripts'][0]['matches']==['https://chatgpt.com/*','https://chat.openai.com/*']
-        with sync_playwright() as p:
-            args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
-            opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=False,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
-            if os.getenv('CHROME_BIN'):
-                opts['executable_path']=os.environ['CHROME_BIN']
-                del opts['channel']
-            context=p.chromium.launch_persistent_context(**opts)
-            try:
-                # Every HTTP(S) request is routed. No external ChatGPT connections are made.
-                context.route(re.compile(r'^https?://'),lambda route:route.abort())
-                context.route('https://chatgpt.com/**',lambda route:route.fulfill(status=200,content_type='text/html',body=HTML))
-                page=context.new_page()
-                worlds=[]
-                cdp=context.new_cdp_session(page)
-                cdp.on('Runtime.executionContextCreated',lambda e:worlds.append(e['context']))
-                cdp.send('Runtime.enable')
-                decisions=[False,True,True]
-                dialogs=[]
-                def on_dialog(dialog):
-                    assert dialog.type=='confirm',dialog.type
-                    assert 'Pro' in dialog.message,dialog.message
-                    dialogs.append(dialog.message)
-                    assert decisions,'unexpected extra confirmation'
-                    (dialog.accept if decisions.pop(0) else dialog.dismiss)()
-                page.on('dialog',on_dialog)
-                page.goto('https://chatgpt.com/',wait_until='load')
-                assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined', 'Content script must be isolated'
-                isolated=isolated_world_state(cdp,worlds)
-                assert isolated, 'No Chromium extension isolated context was created; worlds='+str([(w.get('name'),w.get('origin')) for w in worlds])
-                assert any('"installed":true' in str(x.get('result')) for x in isolated), 'Content script not installed in isolated world: '+str(isolated)
-                assert any('"sendRecognised":true' in str(x.get('result')) for x in isolated), 'Content script did not recognise Send control: '+str(isolated)
-                page.click('#composer-submit-button')
-                if page.evaluate('window.sent')!=0:
-                    raise AssertionError('Cancel did not block requestSubmit; dialogs='+repr(dialogs)+' isolated='+repr(isolated_world_state(cdp,worlds)))
-                assert page.locator('#draft').input_value()=='Draft survives cancellation'
-                assert len(dialogs)==1,dialogs
-                page.click('#composer-submit-button')
-                assert page.evaluate('window.sent')==1,'Approval must submit once'
-                assert len(dialogs)==2,f'duplicate prompts: {dialogs}'
-                page.click('#composer-submit-button')
-                assert page.evaluate('window.sent')==2
-                assert len(dialogs)==3,'Every new Pro send must reprompt'
-                assert not decisions
-                print('PASS: exact packaged Chromium MV3, ChatGPT-origin offline route, isolated document_start, cancel/approve/repeat/requestSubmit')
-            finally:
-                context.close()
+    with TemporaryDirectory(prefix='pro-send-guard-') as tmp, ThreadingHTTPServer(('127.0.0.1',0),Fixture) as server:
+        thread=Thread(target=server.serve_forever,daemon=True);thread.start()
+        try:
+            root=Path(tmp)
+            ext=root/'extension'
+            shutil.copytree(ROOT/'dist'/'chrome',ext)
+            manifest_path=ext/'manifest.json'
+            manifest=json.loads(manifest_path.read_text())
+            assert manifest['content_scripts'][0]['run_at']=='document_start'
+            assert manifest['content_scripts'][0]['matches']==['https://chatgpt.com/*','https://chat.openai.com/*']
+            manifest['content_scripts'][0]['matches'].append('http://127.0.0.1/*')
+            manifest_path.write_text(json.dumps(manifest))
+            profile=root/'profile'
+            with sync_playwright() as p:
+                args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
+                opts=dict(user_data_dir=str(profile),headless=False,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
+                if os.getenv('CHROME_BIN'):
+                    opts['executable_path']=os.environ['CHROME_BIN'];del opts['channel']
+                browser=p.chromium.launch_persistent_context(**opts)
+                try:
+                    page=browser.new_page()
+                    contexts=[]
+                    cdp=browser.new_cdp_session(page)
+                    cdp.on('Runtime.executionContextCreated',lambda e:contexts.append(e['context']))
+                    cdp.send('Runtime.enable')
+                    decisions=[False,True,True]
+                    dialogs=[]
+                    def on_dialog(dialog):
+                        assert dialog.type=='confirm',dialog.type
+                        dialogs.append(dialog.message)
+                        assert 'Pro' in dialog.message,dialog.message
+                        assert decisions,'Unexpected extra confirmation'
+                        (dialog.accept if decisions.pop(0) else dialog.dismiss)()
+                    page.on('dialog',on_dialog)
+                    page.goto(f'http://127.0.0.1:{server.server_port}/',wait_until='load')
+                    isolated=isolated_world_state(cdp,contexts)
+                    if not isolated:
+                        diagnostics(cdp,contexts,profile)
+                        raise AssertionError('No isolated extension execution context was created')
+                    assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined','Guard marker leaked from isolated world'
+                    assert any('"installed":true' in str(o.get('value')) and '"sendRecognised":true' in str(o.get('value')) for o in isolated),str(isolated)
+                    page.click('#composer-submit-button')
+                    assert page.evaluate('window.sent')==0,'Cancel did not block requestSubmit: '+repr(dialogs)
+                    assert page.locator('#draft').input_value()=='Draft survives cancellation'
+                    assert len(dialogs)==1,dialogs
+                    page.click('#composer-submit-button')
+                    assert page.evaluate('window.sent')==1,'Approval did not send exactly once'
+                    assert len(dialogs)==2,'Duplicate confirmation for single send'
+                    page.click('#composer-submit-button')
+                    assert page.evaluate('window.sent')==2
+                    assert len(dialogs)==3 and not decisions,'New gesture failed to reprompt'
+                    print('PASS: packaged Chromium MV3 isolated document_start, native confirm, cancel/approve/repeat/requestSubmit')
+                finally:browser.close()
+        finally:server.shutdown();thread.join(timeout=3)
 
-if __name__=='__main__':
-    main()
+if __name__=='__main__':main()
