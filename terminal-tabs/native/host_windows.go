@@ -161,7 +161,9 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   ptr:=uintptr(unsafe.Pointer(&buf[0]))
   if _,err=winCall(initAttributes,ptr,1,0,uintptr(unsafe.Pointer(&length)));err!=nil{return nil,err}
   defer deleteAttributes.Call(ptr)
-  if _,err=winCall(updateAttributes,ptr,0,procThreadAttributePseudoConsole,uintptr(unsafe.Pointer(&pseudo)),unsafe.Sizeof(pseudo),0,0);err!=nil{return nil,err}
+  // The ConPTY attribute requires HPCON's value itself as lpValue, NOT &HPCON.
+  // Microsoft's ConPTY sample and the Windows Go PTY implementation agree.
+  if _,err=winCall(updateAttributes,ptr,0,procThreadAttributePseudoConsole,pseudo,unsafe.Sizeof(pseudo),0,0);err!=nil{return nil,err}
 
   stage("create job begin")
   rawJob,jobErr:=winCall(createJob,0,0)
@@ -184,24 +186,17 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   var cwd *uint16
   if home!="" {cwd,_=syscall.UTF16PtrFromString(home)}
   pi:=syscall.ProcessInformation{}
-  // Research-only A/B switch, enabled exclusively by explicit diagnostic env.
-  // This is temporary evidence code and must not ship to end users.
-  bare := os.Getenv("CHROMOFOX_TERM_DEBUG")=="1" && os.Getenv("CHROMOFOX_TERM_DIAG_BARE_CHILD")=="1"
-  creationFlags := uint32(extendedStartupInfoPresent | createSuspended)
-  if bare { creationFlags=extendedStartupInfoPresent; stage("DIAGNOSTIC: no CREATE_SUSPENDED and no job assignment") }
   stage("CreateProcess begin")
-  err=syscall.CreateProcess(app,cmdLine,nil,nil,false,creationFlags,nil,cwd,&si.StartupInfo,&pi)
+  err=syscall.CreateProcess(app,cmdLine,nil,nil,false,extendedStartupInfoPresent|createSuspended,nil,cwd,&si.StartupInfo,&pi)
   stage("CreateProcess returned")
   runtime.KeepAlive(buf)
   if err!=nil{return nil,fmt.Errorf("create terminal process: %w",err)}
   process=pi.Process
   defer syscall.CloseHandle(pi.Thread)
-  if !bare {
-    stage("assign job begin")
-    if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
-    stage("assign job returned")
-    if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)} else {stage(fmt.Sprintf("ResumeThread previous suspend count %d",r))}
-  }
+  stage("assign job begin")
+  if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
+  stage("assign job returned")
+  if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)} else {stage(fmt.Sprintf("ResumeThread previous suspend count %d",r))}
 
   s=&session{
     in:os.NewFile(uintptr(inWrite),"conpty-input"),
