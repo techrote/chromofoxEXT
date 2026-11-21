@@ -164,6 +164,13 @@
       const stamp = await readStamp(tabId);
       const uid = stamp.ok ? C.identityOf(stamp.value) : null;
       const rec = uid && Object.hasOwn(data.groups, uid) ? data.groups[uid] : null;
+      const belongs = uid && tab.groupId !== NONE && groupToUid.get(tab.groupId) === uid;
+      if (uid && (data.settings.paused || !rec || !rec.locked) && !belongs) {
+        // Unlocked moves are voluntary. Detach the old session identity before
+        // the destination group adopts this tab; otherwise groups conflict.
+        try { await b.sessions.removeTabValue(tabId, C.STAMP_KEY); }
+        catch (error) { log('Cannot release moved tab identity: ' + error); }
+      }
       if (!data.settings.paused && rec && rec.locked) {
         const destination = uidToGroup.get(uid);
         if (destination && destination.windowId !== tab.windowId) {
@@ -294,8 +301,9 @@
       b.tabs.onCreated.addListener(tab => event(() => onMembershipChanged(tab.id)));
       b.tabs.onAttached.addListener((tabId) => event(() => onMembershipChanged(tabId)));
       b.tabs.onRemoved.addListener(() => event(reconcile));
-      b.tabGroups.onCreated.addListener(() => event(reconcile));
-      b.tabGroups.onRemoved.addListener(() => event(reconcile));
+      // Creation/removal is reflected in tabs.onUpdated(groupId). Eager
+      // reconciliation here can wrongly adopt a dragged locked singleton as
+      // an entirely new group before its membership change event is handled.
       b.tabGroups.onMoved.addListener(() => event(reconcile));
       b.tabGroups.onUpdated.addListener(() => event(reconcile));
       b.runtime.onMessage.addListener((message, sender) => {
