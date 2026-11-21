@@ -40,7 +40,7 @@ jobs:
           p = pathlib.Path('terminal-tabs/dist/extension')
           m = json.loads((p/'manifest.json').read_text())
           assert m['manifest_version'] == 2
-          assert m['permissions'] == ['tabs','nativeMessaging']
+          assert m['permissions'] == ['nativeMessaging']
           assert m['browser_specific_settings']['gecko']['id'] == 'terminal-tabs@chromofoxext.local'
           for name in ['vendor/xterm.js','vendor/xterm.css','vendor/addon-fit.js',
                        'terminal.html','protocol.js','background.js']:

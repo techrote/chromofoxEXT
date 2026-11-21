@@ -17,6 +17,6 @@
     "default_title": "New terminal tab",
     "default_popup": "popup.html"
   },
-  "permissions": ["tabs", "nativeMessaging"],
+  "permissions": ["nativeMessaging"],
   "content_security_policy": "script-src 'self'; object-src 'self'"
 }

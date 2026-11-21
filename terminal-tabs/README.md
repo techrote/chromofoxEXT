@@ -21,10 +21,10 @@ The installer checks for an existing registry entry and **refuses to replace som
 ## Behaviour and limitations
 
 - Each new browser tab has its **own** native messaging connection and Windows ConPTY/child process. Press **Start** explicitly; restoring a Firefox tab does not automatically execute a shell.
-- Input and UTF-8/VT output are delivered over stdio-framed Firefox native messaging, never via a web server. Output has an 8 × 4 KiB renderer-credit window to limit buffering. ANSI colour, navigation keys and interactive prompts use xterm.js 5.5.0 + fit addon 0.10.0.
-- Ctrl+C sends the terminal interrupt if the terminal has focus; use **Copy** button or Ctrl+Shift+C for selected text. **Paste** button or Ctrl+Shift+V pastes into the shell and can execute clipboard contents if it includes newlines. Treat clipboard text as commands.
+- Input and UTF-8/VT output are delivered over stdio-framed Firefox native messaging, never via a web server. Output uses an 8 × 4 KiB renderer-credit window; queued input is bounded to 256 KiB and written off the protocol thread. The host drains ConPTY output before signalling exit, or explicitly reports a bounded drain failure. ANSI colour, navigation keys and interactive prompts use xterm.js 5.5.0 + fit addon 0.10.0.
+- Ctrl+C sends the terminal interrupt if the terminal has focus; use **Copy** button or Ctrl+Shift+C for selected text. **Paste** button or Ctrl+Shift+V reads the clipboard and can execute contents if it includes newlines. Firefox 147+ may ask you to confirm a one-time **Paste** prompt; no blanket `clipboardRead` permission is requested. Ctrl+V inside xterm remains available. Treat clipboard text as commands.
 - The host creates a suspended shell and assigns it to a **Windows kill-on-close job object** before running it. On normal browser tab closure, Firefox disconnection or browser process termination, the host's job handle should kill its process tree. **Crash, breakaway-job and Windows-specific edge cases still require physical Windows validation.**
-- Browser tab history/refresh does not preserve the live shell's state or scrollback. You can launch a new session after a process exits. No network/remote shell support and no shell commands accepted from ordinary webpages.
+- Browser tab history/refresh does not preserve the live shell's state or scrollback. Each Start creates a fresh xterm instance so stale parser modes, delayed writes and scrollback are isolated. You can launch a new session after a process exits. No network/remote shell support and no shell commands accepted from ordinary webpages.
 - Firefox **Manifest V2 persistent background script** is deliberate here to keep native ports alive. This is a Firefox-first experiment, not a Chrome extension package. A separately engineered Chromium MV3 lifecycle is a follow-up.
 - Optional WSL/pwsh use the user's normal installed shell and PATH; no privilege escalation. No remote telemetry, command history upload, or cloud service.
 - `nativeMessaging` gives the extension local code-execution capability **by design**. Install only from source you trust and review its native host and permission model first.
@@ -51,7 +51,8 @@ The packaged extension is at `dist/extension`; the host executable is `dist/nati
 
 - [ ] Launch Windows PowerShell and CMD simultaneously in two Firefox tabs; each must accept input and display independent output.
 - [ ] Enter and interrupt a long-running command with Ctrl+C, resize and verify readline editing works.
-- [ ] Exercise ANSI colours, Unicode, very large output, copy/paste and tab switching; confirm Firefox remains responsive.
+- [ ] Exercise ANSI colours, Unicode, very large output, copy/paste (including Firefox's Paste confirmation prompt) and tab switching; confirm Firefox remains responsive.
+- [ ] Exit from a shell after printing more than 32 KiB: verify all output arrives before the exit status. Paste repeatedly into a non-reading shell and verify that End session remains responsive.
 - [ ] Close one terminal tab while a subprocess is running. Verify the process tree is actually gone, and other tabs remain functional.
 - [ ] Test a browser restart, add-on unload, missing host binary, and reinstallation. No automatic shell start on reload.
 - [ ] Confirm no listener is bound to localhost, no session data is sent to the network, and install/uninstall round trip leaves no stray registration.
