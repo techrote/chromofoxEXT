@@ -1,0 +1,39 @@
+name: ChatGPT Pro Send Guard
+on:
+  pull_request:
+    paths:
+      - "extensions/pro-send-guard/**"
+      - ".github/workflows/pro-send-guard.yml"
+  push:
+    paths:
+      - "extensions/pro-send-guard/**"
+      - ".github/workflows/pro-send-guard.yml"
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build Firefox and Chrome packages
+        run: node extensions/pro-send-guard/build.mjs
+      - name: Pure logic and manifest tests
+        working-directory: extensions/pro-send-guard
+        run: node --test tests/*.test.mjs
+  browser-smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pinned Playwright and Chromium
+        run: |
+          python -m pip install "playwright==1.56.0"
+          python -m playwright install --with-deps chromium
+      - name: Offline simulated ChatGPT composer smoke
+        working-directory: extensions/pro-send-guard
+        run: python tests/browser-smoke.py
