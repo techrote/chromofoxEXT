@@ -95,12 +95,16 @@ function setupPair() {
       TextDecoder, TextEncoder, Uint8Array, atob
     }
   );
+  function flushOne() {
+    assert(events.length>0,"expected a queued event");
+    events.shift()();
+  }
   function flush() {
     let remaining = 100;
     while (events.length && --remaining > 0) events.shift()();
     assert(remaining > 0, "message loop must quiesce");
   }
-  return { element, nativePorts, flush };
+  return { element, nativePorts, flush, flushOne };
 }
 
 test("background/UI End → Start does not deliver stale close to new session", () => {
@@ -130,4 +134,36 @@ test("background/UI End → Start does not deliver stale close to new session", 
   assert.equal(pair.element("start").disabled, true);
   assert.equal(pair.element("stop").disabled, false);
   assert.equal(pair.nativePorts[1].disconnected, false);
+});
+
+test("previously forwarded exit/error/disconnect arriving after End → Start is ignored",()=>{
+  for (const previous of [
+    {type:"exit",code:0},
+    {type:"error",message:"A failed"},
+    {type:"disconnected",message:"A dropped"}
+  ]) {
+    const pair=setupPair();
+    pair.element("start").click();
+    pair.flush();
+    const first=pair.nativePorts[0];
+    first.receive({type:"started"});
+    pair.flush();
+    assert.equal(pair.element("status").textContent,"Connected · Command Prompt");
+    if(previous.type==="disconnected") first.disconnect();
+    else first.receive(previous);
+    // Deliver A's native callback to background, but HOLD its already
+    // forwarded notification in the UI queue until after local restart.
+    pair.flushOne();
+    pair.element("stop").click();
+    pair.element("start").click();
+    pair.flush();
+    assert.equal(pair.nativePorts.length,2,previous.type);
+    const second=pair.nativePorts[1];
+    second.receive({type:"started"});
+    pair.flush();
+    assert.equal(pair.element("status").textContent,"Connected · Command Prompt",previous.type);
+    assert.equal(pair.element("start").disabled,true,previous.type);
+    assert.equal(pair.element("stop").disabled,false,previous.type);
+    assert.equal(second.disconnected,false,previous.type);
+  }
 });

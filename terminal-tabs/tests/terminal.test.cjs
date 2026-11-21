@@ -48,7 +48,13 @@ function setup() {
     TextDecoder,TextEncoder,Uint8Array,atob
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,"../src/extension/terminal.js"),"utf8"),sandbox);
-  return {element,sent,terminals,receive:m=>onMessage.forEach(f=>f(m))};
+  return {element,sent,terminals,
+    currentId:()=>sent.filter(m=>m.type==="start").at(-1)?.sessionId,
+    receive:m=>{
+      const current=sent.filter(x=>x.type==="start").at(-1)?.sessionId;
+      onMessage.forEach(f=>f({sessionId:current,...m}));
+    }
+  };
 }
 test("new session replaces terminal modes and drops previous renderer ACK",()=>{
   const x=setup();
@@ -92,4 +98,25 @@ test("rapid End → Start accepts the second host started event",()=>{
   x.receive({type:"started"});
   assert.equal(x.element("start").disabled,true);
   assert.equal(x.element("stop").disabled,false);
+});
+
+test("already-forwarded old lifecycle notifications cannot end session B",()=>{
+  for (const old of [{type:"exit",code:0},{type:"error",message:"A failed"},
+    {type:"disconnected",message:"A closed"}]) {
+    const x=setup();
+    x.element("start").click();
+    const oldId=x.currentId();
+    x.receive({type:"started",sessionId:oldId});
+    x.element("stop").click();
+    x.element("start").click();
+    const secondId=x.currentId();
+    assert(secondId>oldId);
+    const closes=x.sent.filter(m=>m.type==="close").length;
+    x.receive({...old,sessionId:oldId});
+    assert.equal(x.sent.filter(m=>m.type==="close").length,closes);
+    x.receive({type:"started",sessionId:secondId});
+    assert.equal(x.element("start").disabled,true,old.type);
+    assert.equal(x.element("stop").disabled,false,old.type);
+    assert.equal(x.element("status").textContent,"Connected · Command Prompt");
+  }
 });
