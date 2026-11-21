@@ -88,7 +88,42 @@ def main():
             manifest['content_scripts'][0]['matches'].append('http://127.0.0.1/*')
             manifest_path.write_text(json.dumps(manifest))
             profile=root/'profile'
+            # Control extension: identical Playwright launch mode, but no project
+            # files, permissions, storage or model logic. This isolates Chromium
+            # registration failure from the package under test.
+            control=root/'control'
+            control.mkdir()
+            (control/'manifest.json').write_text(json.dumps({
+                'manifest_version':3,'name':'MV3 Registration Control',
+                'version':'0.0.1','content_scripts':[{
+                    'matches':['http://127.0.0.1/*'],
+                    'js':['probe.js'],'run_at':'document_start'}]
+            }))
+            (control/'probe.js').write_text(
+                "document.documentElement.setAttribute('data-mv3-control','loaded');")
             with sync_playwright() as p:
+                probe_args=[f'--disable-extensions-except={control}',
+                            f'--load-extension={control}','--no-sandbox']
+                probe_opts=dict(user_data_dir=str(root/'probe-profile'),
+                    headless=False,channel='chromium',
+                    ignore_default_args=['--disable-extensions'],args=probe_args)
+                if os.getenv('CHROME_BIN'):
+                    probe_opts['executable_path']=os.environ['CHROME_BIN']
+                    del probe_opts['channel']
+                probe=p.chromium.launch_persistent_context(**probe_opts)
+                try:
+                    control_page=probe.new_page()
+                    control_page.goto(f'http://127.0.0.1:{server.server_port}/',wait_until='load')
+                    for _ in range(5):
+                        if control_page.locator('html').get_attribute('data-mv3-control')=='loaded':
+                            break
+                        control_page.wait_for_timeout(400)
+                        control_page.reload()
+                    probe_loaded=control_page.locator('html').get_attribute('data-mv3-control')=='loaded'
+                    print('REGISTRATION CONTROL:',probe_loaded,flush=True)
+                    assert probe_loaded, 'Chromium could not load a trivial MV3 content-script extension: harness/browser registration failure'
+                finally:
+                    probe.close()
                 args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
                 opts=dict(user_data_dir=str(profile),headless=False,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
                 if os.getenv('CHROME_BIN'):
