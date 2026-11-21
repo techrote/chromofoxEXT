@@ -39,7 +39,11 @@ class Fixture(BaseHTTPRequestHandler):
 def isolated_world_state(cdp, contexts):
     details=[]
     for ctx in contexts:
-        if not str(ctx.get('origin','')).startswith('chrome-extension://'):continue
+        # A content script runs in an isolated world, but recent Chromium
+        # versions do not promise that the world origin starts with
+        # chrome-extension://. Test the actual production sentinel and verify
+        # that it is NOT the page's default execution context.
+        if ctx.get('auxData',{}).get('isDefault') is True: continue
         try:
             result=cdp.send('Runtime.evaluate',{
                 'contextId':ctx['id'],
@@ -51,8 +55,11 @@ def isolated_world_state(cdp, contexts):
                 })''',
                 'returnByValue':True
             })
-            details.append({'origin':ctx.get('origin'),'value':result.get('result',{}).get('value'),
-                'exception':result.get('exceptionDetails',{}).get('text')})
+            value=result.get('result',{}).get('value')
+            parsed=json.loads(value or '{}')
+            if parsed.get('installed'):
+                details.append({'origin':ctx.get('origin'),'value':value,
+                    'exception':result.get('exceptionDetails',{}).get('text')})
         except Exception as err:details.append({'origin':ctx.get('origin'),'error':str(err)[:250]})
     return details
 
@@ -100,7 +107,9 @@ def main():
                     'js':['probe.js'],'run_at':'document_start'}]
             }))
             (control/'probe.js').write_text(
-                "document.documentElement.setAttribute('data-mv3-control','loaded');")
+                "const mark=()=>document.documentElement?.setAttribute('data-mv3-control','loaded');"
+                "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',mark,{once:true})}"
+                "else{mark()}")
             with sync_playwright() as p:
                 probe_args=[f'--disable-extensions-except={control}',
                             f'--load-extension={control}','--no-sandbox']
