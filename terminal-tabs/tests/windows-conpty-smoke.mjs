@@ -58,6 +58,8 @@ function session(profile, expression) {
             found = true;
             send({ type: "close" });
           }
+        } else if (msg.type === "exit") {
+          return finish(new Error(profile + ": child exited before expected output with code " + msg.code + "; output=" + output.slice(-1000)));
         } else if (msg.type === "error") {
           return finish(new Error(profile + ": native host error: " + msg.message));
         }

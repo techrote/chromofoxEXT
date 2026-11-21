@@ -194,7 +194,7 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   stage("assign job begin")
   if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
   stage("assign job returned")
-  if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)}
+  if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)} else {stage(fmt.Sprintf("ResumeThread previous suspend count %d",r))}
 
   s=&session{
     in:os.NewFile(uintptr(inWrite),"conpty-input"),
@@ -243,9 +243,10 @@ func (s *session) streamOutput(w *frameWriter) {
   }
 }
 func (s *session) waitExit(w *frameWriter) {
-  if _,err:=syscall.WaitForSingleObject(s.process,infiniteWait);err!=nil {return}
+  if _,err:=syscall.WaitForSingleObject(s.process,infiniteWait);err!=nil {stage("wait on process failed");return}
   var code uint32
   if syscall.GetExitCodeProcess(s.process,&code)==nil {
+    stage(fmt.Sprintf("shell exited with code %d",code))
     _=w.send(response{Type:"exit",Code:int64(code)})
   }
 }
@@ -285,7 +286,9 @@ func main() {
     case "input":
       if len(msg.Data)>8192 { _=writer.send(response{Type:"error",Message:"Input chunk exceeds 8 KiB"});return }
       if strings.ContainsRune(msg.Data,0) { _=writer.send(response{Type:"error",Message:"NUL input is not supported"});return}
+      stage(fmt.Sprintf("sending %d bytes to ConPTY input",len(msg.Data)))
       if _,err=io.WriteString(s.in,msg.Data);err!=nil{_ =writer.send(response{Type:"error",Message:"Terminal input pipe closed"});return}
+      stage("ConPTY input write returned")
     case "resize":
       if err=s.resize(msg.Cols,msg.Rows);err!=nil {_=writer.send(response{Type:"error",Message:err.Error()})}
     case "ack":
