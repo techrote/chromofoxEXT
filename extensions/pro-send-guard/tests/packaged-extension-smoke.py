@@ -124,7 +124,8 @@ def main():
                 probe=p.chromium.launch_persistent_context(**probe_opts)
                 try:
                     control_page=probe.new_page()
-                    probe_cdp=probe.new_cdp_session(control_page)
+                    assert probe.browser is not None, 'Persistent context missing owning browser for CDP install'
+                    probe_cdp=probe.browser.new_browser_cdp_session()
                     control_install=probe_cdp.send('Extensions.loadUnpacked',{'path':str(control.resolve())})
                     assert control_install.get('id'), 'Control MV3 failed to register via Extensions.loadUnpacked'
                     print('REGISTRATION CONTROL ID:',control_install['id'],flush=True)
@@ -150,7 +151,9 @@ def main():
                     cdp=browser.new_cdp_session(page)
                     cdp.on('Runtime.executionContextCreated',lambda e:contexts.append(e['context']))
                     cdp.send('Runtime.enable')
-                    installed=cdp.send('Extensions.loadUnpacked',{'path':str(ext.resolve())})
+                    assert browser.browser is not None, 'Persistent context missing owning browser for CDP install'
+                    install_cdp=browser.browser.new_browser_cdp_session()
+                    installed=install_cdp.send('Extensions.loadUnpacked',{'path':str(ext.resolve())})
                     assert installed.get('id'), 'Pro Send Guard failed to register via Extensions.loadUnpacked'
                     print('PACKAGED EXTENSION ID:',installed['id'],flush=True)
                     decisions=[False,True,True]
