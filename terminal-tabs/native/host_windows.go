@@ -29,6 +29,10 @@ const jobObjectExtendedLimitInformation = 9
 const jobObjectLimitKillOnJobClose = 0x00002000
 const infiniteWait = 0xffffffff
 
+func stage(message string) {
+  if os.Getenv("CHROMOFOX_TERM_DEBUG")=="1" {fmt.Fprintln(os.Stderr,"chromofox-native: "+message)}
+}
+
 var kernel32 = syscall.NewLazyDLL("kernel32.dll")
 var createPseudo = kernel32.NewProc("CreatePseudoConsole")
 var resizePseudo = kernel32.NewProc("ResizePseudoConsole")
@@ -124,6 +128,7 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   if _,err=os.Stat(exe);err!=nil{return nil,fmt.Errorf("profile executable unavailable: %w",err)}
 
   var inRead,inWrite,outRead,outWrite syscall.Handle
+  stage("create input pipe")
   if err=syscall.CreatePipe(&inRead,&inWrite,nil,0);err!=nil{return nil,err}
   defer syscall.CloseHandle(inRead)
   if err=syscall.CreatePipe(&outRead,&outWrite,nil,0);err!=nil{syscall.CloseHandle(inWrite);return nil,err}
@@ -143,10 +148,13 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
       syscall.CloseHandle(outRead)
     }
   }()
+  stage("CreatePseudoConsole begin")
   result,_,callErr := createPseudo.Call(coord(cols,rows),uintptr(inRead),uintptr(outWrite),0,uintptr(unsafe.Pointer(&pseudo)))
+  stage("CreatePseudoConsole returned")
   if result!=0 {return nil,fmt.Errorf("CreatePseudoConsole HRESULT 0x%x: %v",result,callErr)}
 
   var length uintptr
+  stage("init attributes begin")
   initAttributes.Call(0,1,0,uintptr(unsafe.Pointer(&length)))
   if length==0 || length>1<<20 {return nil,errors.New("could not size Windows process attributes")}
   buf:=make([]byte,length)
@@ -155,6 +163,7 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   defer deleteAttributes.Call(ptr)
   if _,err=winCall(updateAttributes,ptr,0,procThreadAttributePseudoConsole,uintptr(unsafe.Pointer(&pseudo)),unsafe.Sizeof(pseudo),0,0);err!=nil{return nil,err}
 
+  stage("create job begin")
   rawJob,jobErr:=winCall(createJob,0,0)
   if jobErr!=nil{return nil,fmt.Errorf("create kill-on-close job: %w",jobErr)}
   job=syscall.Handle(rawJob)
@@ -175,12 +184,16 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   var cwd *uint16
   if home!="" {cwd,_=syscall.UTF16PtrFromString(home)}
   pi:=syscall.ProcessInformation{}
+  stage("CreateProcess begin")
   err=syscall.CreateProcess(app,cmdLine,nil,nil,false,extendedStartupInfoPresent|createSuspended,nil,cwd,&si.StartupInfo,&pi)
+  stage("CreateProcess returned")
   runtime.KeepAlive(buf)
   if err!=nil{return nil,fmt.Errorf("create terminal process: %w",err)}
   process=pi.Process
   defer syscall.CloseHandle(pi.Thread)
+  stage("assign job begin")
   if _,err=winCall(assignJob,uintptr(job),uintptr(process));err!=nil{return nil,fmt.Errorf("assign terminal process to cleanup job: %w",err)}
+  stage("assign job returned")
   if r,_,e:=resumeThread.Call(uintptr(pi.Thread));r==0xffffffff{return nil,fmt.Errorf("resume terminal process: %w",e)}
 
   s=&session{
@@ -191,6 +204,7 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   }
   for i:=0;i<cap(s.credits);i++ {s.credits<-struct{}{}}
   success=true
+  stage("newSession ready")
   return s,nil
 }
 
@@ -215,11 +229,13 @@ func (s *session) acknowledge() {
   select {case s.credits<-struct{}{}: default:}
 }
 func (s *session) streamOutput(w *frameWriter) {
+  stage("output pump started")
   // One 4 KiB frame per renderer credit. No unbounded browser output queue.
   buf:=make([]byte,4096)
   for {
     select {case <-s.done: return;case <-s.credits:}
     n,err:=s.out.Read(buf)
+    if n>0 {stage(fmt.Sprintf("conpty output %d bytes",n))}
     if n>0 {
       if e:=w.send(response{Type:"data",Data:base64.StdEncoding.EncodeToString(buf[:n])});e!=nil{return}
     } else {s.acknowledge()}
@@ -236,6 +252,7 @@ func (s *session) waitExit(w *frameWriter) {
 
 func main() {
   if runtime.GOOS!="windows" {return}
+  stage("host started")
   writer:=&frameWriter{writer:os.Stdout}
   var s *session
   defer func(){if s!=nil{s.close()}}()
@@ -245,6 +262,7 @@ func main() {
       if err!=io.EOF {_=writer.send(response{Type:"error",Message:"Invalid or closed native protocol connection"})}
       return
     }
+    stage("request "+msg.Type)
     if s==nil && msg.Type!="start" {
       _=writer.send(response{Type:"error",Message:"Start a profile first"})
       return
@@ -260,6 +278,7 @@ func main() {
         _=writer.send(response{Type:"error",Message:err.Error()})
         return
       }
+      stage("sending started")
       if writer.send(response{Type:"started"})!=nil {return}
       go s.streamOutput(writer)
       go s.waitExit(writer)
