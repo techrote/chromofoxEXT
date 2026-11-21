@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'">
+<title>Terminal — chromofoxEXT</title>
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="ui.css">
+</head>
+<body class="terminal-page">
+<header class="toolbar">
+  <div class="brand"><span class="mark">›_</span><span>Terminal <small>chromofoxEXT</small></span></div>
+  <label for="profile">Shell</label>
+  <select id="profile" aria-label="Shell profile">
+    <option value="powershell">Windows PowerShell</option>
+    <option value="cmd">Command Prompt</option>
+    <option value="pwsh">PowerShell 7</option>
+    <option value="wsl">WSL</option>
+  </select>
+  <button id="start" class="primary" type="button">Start session</button>
+  <button id="stop" type="button" disabled>End session</button>
+  <div class="grow"></div>
+  <button id="copy" type="button" title="Copy selection">Copy</button>
+  <button id="paste" type="button" aria-describedby="clipboard-help" title="Firefox may ask you to confirm Paste; Ctrl+V in the terminal is an alternative">Paste</button>
+</header>
+<div class="statusline"><span id="dot"></span><span id="status" role="status">Not started — choose a shell and press Start session</span></div>
+<main id="screen" aria-label="Interactive terminal"><div id="terminal" role="region" aria-label="Terminal session"></div></main>
+<footer><span>Local process · No remote listener · Closing this tab ends its process tree</span><span id="clipboard-help">Paste / Ctrl+Shift+V may need Firefox confirmation. Ctrl+V pastes directly into the focused terminal.</span></footer>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/addon-fit.js"></script>
+<script src="protocol.js"></script>
+<script src="terminal.js"></script>
+</body></html>

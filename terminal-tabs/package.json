@@ -1,0 +1,14 @@
+{
+  "name": "chromofox-terminal-tabs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Firefox-first local terminal tabs with a Windows ConPTY companion",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "build": "node scripts/build.mjs"
+  },
+  "dependencies": {
+    "@xterm/xterm": "5.5.0",
+    "@xterm/addon-fit": "0.10.0"
+  }
+}

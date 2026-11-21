@@ -1,0 +1,135 @@
+name: Terminal Tabs — Firefox/Windows PoC
+
+on:
+  push:
+    branches:
+      - feature/term-tabs-001-firefox-conpty
+    paths:
+      - terminal-tabs/**
+      - .github/workflows/terminal-tabs.yml
+  pull_request:
+    paths:
+      - terminal-tabs/**
+      - .github/workflows/terminal-tabs.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build locally bundled terminal renderer
+        working-directory: terminal-tabs
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+          npm run build
+          node --check src/extension/background.js
+          node --check src/extension/terminal.js
+          node --check src/extension/popup.js
+      - name: Verify manifest and entirely local assets
+        shell: python
+        run: |
+          import json, pathlib
+          p = pathlib.Path('terminal-tabs/dist/extension')
+          m = json.loads((p/'manifest.json').read_text())
+          assert m['manifest_version'] == 2
+          assert m['permissions'] == ['nativeMessaging']
+          assert m['browser_specific_settings']['gecko']['id'] == 'terminal-tabs@chromofoxext.local'
+          for name in ['vendor/xterm.js','vendor/xterm.css','vendor/addon-fit.js',
+                       'terminal.html','protocol.js','background.js']:
+              assert (p/name).stat().st_size > 0, name
+
+  windows-package:
+    runs-on: windows-2022
+    needs: extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Go protocol tests and native host build
+        shell: pwsh
+        working-directory: terminal-tabs/native
+        run: |
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Go vet failed' }
+          New-Item -ItemType Directory -Force ..\dist\native | Out-Null
+          go build -trimpath -ldflags '-s -w' -o ..\dist\native\chromofox_terminal_host.exe .
+          if ($LASTEXITCODE -ne 0) { throw 'Go build failed' }
+      - name: Exercise two actual ConPTY shells and clean host shutdown
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-conpty-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY integration smoke failed' }
+      - name: Verify native close kills a live descendant process
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-tree-cleanup.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY descendant process cleanup failed' }
+      - name: Verify backed-up ConPTY input cannot block native Close
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-blocked-input.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY blocked-input close test failed' }
+      - name: Rebuild local extension assets
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'JS tests failed' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { throw 'Extension build failed' }
+      - name: Test HKCU install/status/uninstall round trip
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          ./install.ps1 -Action Install -SourceExe './dist/native/chromofox_terminal_host.exe'
+          ./install.ps1 -Action Status
+          $name = 'Software\Mozilla\NativeMessagingHosts\com.techrote.chromofox_terminal_tabs'
+          $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($name)
+          if (!$k) { throw 'Registration missing' }
+          $path = [string]$k.GetValue('', '')
+          $k.Dispose()
+          if (!(Test-Path $path)) { throw 'Manifest missing' }
+          $m = Get-Content -Raw $path | ConvertFrom-Json
+          if ($m.allowed_extensions[0] -ne 'terminal-tabs@chromofoxext.local') { throw 'Extension ID mismatch' }
+          ./install.ps1 -Action Uninstall
+          $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($name)
+          if ($k) { $k.Dispose(); throw 'Registry entry survived removal' }
+      - name: Package owner acceptance ZIP
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          $target = 'dist/bundle'
+          New-Item -ItemType Directory -Force $target | Out-Null
+          Copy-Item 'dist/extension' -Destination $target -Recurse
+          Copy-Item 'dist/native' -Destination $target -Recurse
+          Copy-Item 'install.ps1' $target
+          Copy-Item 'README.md' $target
+          Copy-Item 'scripts/Install Terminal Tabs.cmd' $target
+          Copy-Item 'scripts/Uninstall Terminal Tabs.cmd' $target
+          Compress-Archive -Path 'dist/bundle/*' -DestinationPath 'dist/chromofox-terminal-tabs-windows-ff.zip' -Force
+          Get-FileHash 'dist/chromofox-terminal-tabs-windows-ff.zip' -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chromofox-terminal-tabs-windows-ff
+          path: terminal-tabs/dist/chromofox-terminal-tabs-windows-ff.zip
+          if-no-files-found: error
+          retention-days: 14
