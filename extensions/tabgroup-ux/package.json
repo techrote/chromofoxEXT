@@ -1,0 +1,13 @@
+{
+  "name": "chromofoxext-tabgroup-ux",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Firefox tab group soft locks and palette manager",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "check": "node --check src/core.js && node --check src/service.js && node --check src/background.js && node --check manager.js && node --check popup.js && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
