@@ -146,7 +146,7 @@ def additional_layout_regressions(browser):
     page.evaluate('''() => { document.getElementById('model').dataset.testid='model-switcher-dropdown-button'; document.getElementById('model').textContent='Pro'; }''')
     assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'pro'
     page.evaluate('''() => { const b=document.createElement('button'); b.dataset.testid='thinking-effort-button';b.textContent='High';document.querySelector('[data-testid="composer"]').prepend(b); }''')
-    assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'unknown', 'Conflicting visible labels are not certainly non-Pro'
+    assert page.evaluate('ChromofoxProSendLogic.selectedMode(document).mode') == 'pro', 'High effort cannot override an identified Pro model'
     page.click('#send')
     assert page.evaluate('window.sent') == 0 and len(page.evaluate('window._confirmMessages')) == 2
     page.close()
@@ -273,6 +273,124 @@ def additional_layout_regressions(browser):
 
     print('PASS: alternate textarea/ProseMirror/button layouts, JS sends, external requestSubmit, hidden/stale/ambiguous models')
 
+def adversarial_fail_open_regressions(browser):
+    # Two visible forms share a single named composer and a JS-only Send footer.
+    # No unique editor is identifiable from the button. The guard must protect
+    # the recognized Send with an unknown-model confirmation, NOT fail open.
+    shared_html = '''<!doctype html><html><body><main>
+      <div data-testid="composer" id="shared-composer">
+        <button data-testid="model-switcher-dropdown-button">Pro</button>
+        <form id="first-form"><textarea name="prompt-textarea" id="first-draft">First draft</textarea></form>
+        <form id="second-form"><textarea name="prompt-textarea" id="second-draft">Second draft</textarea></form>
+        <footer><button id="shared-js" aria-label="Send">Send</button>
+          <button id="shared-submit" aria-label="Send">Send</button></footer>
+      </div></main></body></html>'''
+    shared_app = '''window.sentJS=0;window.sentForm=0;
+      document.querySelector('#shared-js').onclick=()=>window.sentJS++;
+      document.querySelector('#shared-submit').onclick=()=>document.querySelector('#second-form').requestSubmit();
+      document.querySelector('#second-form').onsubmit=e=>{e.preventDefault();window.sentForm++};
+      document.querySelector('#first-form').onsubmit=e=>e.preventDefault();void 0;'''
+    page = new_page(browser, shared_html, shared_app)
+    route=page.evaluate('''() => {const L=ChromofoxProSendLogic;
+      const js=document.querySelector('#shared-js');
+      const sub=document.querySelector('#shared-submit');
+      const form=document.querySelector('#second-form');
+      return {clickRoot:L.composerRoot(document,js)?.id,
+        button:L.isSendButton(js,document), other:L.isSendButton(sub,document),
+        form:L.isComposerForm(form,document),
+        selected:L.selectedMode(document,L.composerRoot(document,js)).mode};} ''')
+    assert route=={'clickRoot':'shared-composer','button':True,'other':True,'form':True,'selected':'unknown'},route
+    page.click('#shared-js')
+    assert page.evaluate('window.sentJS')==0
+    assert page.locator('#first-draft').input_value()=='First draft'
+    assert page.locator('#second-draft').input_value()=='Second draft'
+    assert len(page.evaluate('window._confirmMessages'))==1
+    assert 'cannot verify' in page.evaluate('window._confirmMessages[0]')
+    page.evaluate('window._confirmResult=true')
+    page.click('#shared-js')
+    assert page.evaluate('window.sentJS')==1
+    assert len(page.evaluate('window._confirmMessages'))==2
+    # Approval of the JS-only Send must not authorise another trusted click.
+    page.click('#shared-submit')
+    assert page.evaluate('window.sentForm')==1
+    assert len(page.evaluate('window._confirmMessages'))==3, 'One confirm for click plus requestSubmit'
+    page.click('#shared-submit')
+    assert page.evaluate('window.sentForm')==2
+    assert len(page.evaluate('window._confirmMessages'))==4, 'Every new Send gesture must prompt'
+    # Direct form submission is still protected independently from the shared footer.
+    page.wait_for_timeout(420)
+    page.evaluate('window._confirmResult=false')
+    page.locator('#second-form').evaluate('(f)=>f.requestSubmit()')
+    assert page.evaluate('window.sentForm')==2
+    assert len(page.evaluate('window._confirmMessages'))==5
+    page.close()
+
+    # An unnamed common shell has the same conservative fallback. The named
+    # composer selector is not a precondition to protect a recognisable Send.
+    unnamed_html = shared_html.replace('data-testid="composer" id="shared-composer"', 'id="shared-composer"')
+    page = new_page(browser, unnamed_html, shared_app)
+    assert page.evaluate('''() => {const L=ChromofoxProSendLogic;
+      return L.composerRoot(document,document.querySelector('#shared-submit'))?.id;}''')=='shared-composer'
+    page.click('#shared-submit')
+    assert page.evaluate('window.sentForm')==0
+    assert len(page.evaluate('window._confirmMessages'))==1
+    page.evaluate('window._confirmResult=true')
+    page.click('#shared-submit')
+    assert page.evaluate('window.sentForm')==1, {'sent':page.evaluate('window.sentForm'), 'messages':page.evaluate('window._confirmMessages')}
+    assert len(page.evaluate('window._confirmMessages'))==2, 'Unnamed shared click and form must get one prompt'
+    # An approved JS-only click is NOT a reusable ticket for a later direct
+    # form.submit; the cross-form allowance ends at the event-task boundary.
+    page.click('#shared-js')
+    assert page.evaluate('window.sentJS')==1
+    assert len(page.evaluate('window._confirmMessages'))==3
+    page.evaluate('window._confirmResult=false')
+    page.locator('#second-form').evaluate('(f)=>f.requestSubmit()')
+    assert page.evaluate('window.sentForm')==1
+    assert len(page.evaluate('window._confirmMessages'))==4, 'Distinct form submit cannot borrow shared-footer approval'
+    page.close()
+
+    # Visible header Pro cannot be overridden by an unrelated local High
+    # reasoning-effort widget. A standalone effort label has no model-family
+    # authority, and so the default unknown-mode protection must apply.
+    effort_html = '''<!doctype html><html><body>
+      <header><button data-testid="model-switcher-dropdown-button">Pro</button></header><main>
+      <div data-testid="composer" id="active-composer">
+        <button id="effort" data-testid="reasoning-effort-button">High</button>
+        <textarea name="prompt-textarea" id="draft">Pro model draft</textarea>
+        <button id="send" aria-label="Send">Send</button>
+      </div></main></body></html>'''
+    page = new_page(browser,effort_html,'''window.sent=0;
+      document.querySelector('#send').onclick=()=>window.sent++;void 0;''')
+    assert page.evaluate('''() => { const L=ChromofoxProSendLogic;
+       return L.selectedMode(document,L.composerRoot(document,document.querySelector('#send'))).mode; }''')=='unknown'
+    page.click('#send')
+    assert page.evaluate('window.sent')==0
+    assert len(page.evaluate('window._confirmMessages'))==1
+    assert 'cannot verify' in page.evaluate('window._confirmMessages[0]')
+    page.evaluate('window._confirmResult=true')
+    page.click('#send')
+    assert page.evaluate('window.sent')==1
+    assert len(page.evaluate('window._confirmMessages'))==2
+    # Verified model switcher Instant is independent of the effort High.
+    page.evaluate('''() => {const b=document.createElement('button');
+      b.id='model';b.dataset.testid='model-switcher-dropdown-button';
+      b.textContent='Instant';document.querySelector('#active-composer').prepend(b); }''')
+    assert page.evaluate('''() => {const L=ChromofoxProSendLogic;
+      return L.selectedMode(document,L.composerRoot(document,document.querySelector('#send'))).mode;}''')=='non-pro'
+    page.click('#send')
+    assert page.evaluate('window.sent')==2
+    assert len(page.evaluate('window._confirmMessages'))==2
+    page.evaluate("document.querySelector('#model').textContent='Pro Extended'")
+    assert page.evaluate('''() => {const L=ChromofoxProSendLogic;
+      return L.selectedMode(document,L.composerRoot(document,document.querySelector('#send'))).mode;}''')=='pro'
+    page.evaluate('window._confirmResult=false')
+    page.click('#send')
+    assert page.evaluate('window.sent')==2
+    assert len(page.evaluate('window._confirmMessages'))==3
+    page.close()
+    print('PASS: ambiguous shared-composer Send and effort-as-model false negative regressions')
+
+
 def main():
     with sync_playwright() as p:
         chrome = os.environ.get('CHROME_BIN') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None)
@@ -341,6 +459,7 @@ def main():
             assert state(page)['sent'] == 2 and len(state(page)['confirmations']) == 1, state(page)
             page.close()
             additional_layout_regressions(browser)
+            adversarial_fail_open_regressions(browser)
             print('PASS: offline Chromium cancel/approve/Enter/Shift+Enter/IME/effort/upsell/unknown/preferences')
         finally:
             browser.close()

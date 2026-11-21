@@ -131,7 +131,7 @@
     if (editors.length === 1) return rootFromEditor(editors[0]);
     if (editors.length > 1) return form; // Ambiguous selection => unknown; never select another composer.
     const named = form.closest(COMPOSER);
-    if (named && visibleEditors(named).length === 1) return named;
+    if (named && isVisibleActive(named) && visibleEditors(named).length) return named;
     return null;
   }
 
@@ -142,8 +142,28 @@
     const form = button.form || button.closest('form');
     if (form) return rootFromForm(form);
     let parent = button.parentElement;
+    let ambiguous = null;
     for (let depth = 0; parent && depth < 7 && !['MAIN', 'BODY', 'HTML'].includes(parent.tagName); depth++, parent = parent.parentElement) {
-      if (visibleEditors(parent).length === 1) return rootFromEditor(visibleEditors(parent)[0]);
+      const editors = visibleEditors(parent);
+      if (editors.length === 1) return rootFromEditor(editors[0]);
+      if (editors.length > 1 && !ambiguous && isVisibleActive(parent)) ambiguous = parent;
+    }
+    // A shared footer in a multi-editor shell can legitimately send from one
+    // of several editors. The association is ambiguous, NOT absent: intercept
+    // the Send rather than assuming it is safe. Never fall back to main/body.
+    if (named && isVisibleActive(named) && visibleEditors(named).length > 1) return named;
+    return ambiguous;
+  }
+
+  function ambiguousComposer(node) {
+    // A named shell is ideal, but an unnamed common editor/Send ancestor is
+    // also a valid *ambiguous* context. Stop before main/body to avoid
+    // treating unrelated sidebar or transcript controls as a composer.
+    const named = node?.closest?.(COMPOSER);
+    if (named && isVisibleActive(named) && visibleEditors(named).length > 1) return named;
+    let parent = node;
+    for (let depth = 0; parent && depth < 7 && !['MAIN', 'BODY', 'HTML'].includes(parent.tagName); depth++, parent = parent.parentElement) {
+      if (isVisibleActive(parent) && visibleEditors(parent).length > 1) return parent;
     }
     return null;
   }
@@ -175,6 +195,20 @@
       return /^(?:(?:gpt[\s-]?\d+(?:\.\d+)?|\d+(?:\.\d+)?)(?:\s+sol)?\s*)?(?:pro|thinking|instant|medium|high|extra\s+high)(?:\s*[·(\-/]\s*\w.*|\s+(?:standard|extended))?$/i.test(label) ||
         /^(?:gpt[-\s]?\d+(?:\.\d+)?(?:\s+sol)?|\d+\.\d+\s+sol)$/i.test(label);
     });
+  }
+
+  function modelProvenance(node) {
+    // "High" on a reasoning/thinking-effort widget does not identify the
+    // model family. Only a model-picker/switcher can authorise non-Pro.
+    // Other visible controls may still positively indicate Pro, but cannot
+    // safely suppress confirmation for non-Pro labels.
+    const testid = normalize(node.getAttribute('data-testid')).toLowerCase();
+    const aria = normalize(node.getAttribute('aria-label')).toLowerCase();
+    const title = normalize(node.getAttribute('title')).toLowerCase();
+    if (/\b(?:reasoning|thinking)[-_ ]?effort\b/.test(testid + ' ' + aria + ' ' + title)) return 'effort';
+    if (/model[-_ ]?(?:switcher|picker|selector)/.test(testid + ' ' + aria + ' ' + title) ||
+        /current model/.test(aria)) return 'model';
+    return 'unverified';
   }
 
   function selectedMode(doc, root = null) {
@@ -214,6 +248,16 @@
       const states = new Set(labels.map(classify));
       if (states.size > 1) { unknown = true; continue; }
       const mode = [...states][0];
+      // Generic widgets, arbitrary comboboxes, and reasoning-effort controls
+      // cannot establish a non-Pro MODEL. They may represent a different UI
+      // state entirely. Requiring actual model-family provenance closes the
+      // header-Pro + in-composer-High-effort fail-open case.
+      if (mode === 'non-pro' && modelProvenance(node) !== 'model') {
+        // Ignore effort/unverified labels as proof of model family. If a
+        // separate trusted model picker says Instant, keep that evidence;
+        // otherwise the absence of model evidence resolves to unknown.
+        continue;
+      }
       const observation = { mode, label: labels[0], weight };
       if (mode === 'pro' && (!pro || weight > pro.weight)) pro = observation;
       else if (mode === 'non-pro' && (!nonPro || weight > nonPro.weight)) nonPro = observation;
@@ -238,6 +282,6 @@
 
   globalThis.ChromofoxProSendLogic = Object.freeze({
     normalize, classify, selectedMode, editor, composerRoot, closestEditor,
-    isSendButton, isComposerForm, isVisibleActive
+    isSendButton, isComposerForm, isVisibleActive, ambiguousComposer
   });
 })();

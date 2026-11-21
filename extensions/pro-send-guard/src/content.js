@@ -10,6 +10,9 @@
   const settings = { ...defaults };
   // One confirmed send is associated with its own composer, never a second editor.
   const approvals = new WeakMap();
+  // Cross-form attribution for an ambiguous shared footer is valid only while
+  // dispatching the *same* click, not for subsequent programmatic submissions.
+  let activeSharedClick = null;
 
   function updateSettings(values) {
     for (const key of Object.keys(defaults)) if (typeof values?.[key] === 'boolean') settings[key] = values[key];
@@ -48,6 +51,19 @@
       approvals.delete(context);
       return;
     }
+    // A shared Send footer may resolve to its named multi-editor shell while
+    // a synchronous JS requestSubmit resolves to the specific child form.
+    // Consume the prior approved click once for that same shell, without ever
+    // granting the approval to a second independent click or Enter gesture.
+    if (event.type === 'submit' && !approval) {
+      const shared = L.ambiguousComposer(event.target);
+      const sharedApproval = shared && approvals.get(shared);
+      if (sharedApproval?.source === 'click' && activeSharedClick === sharedApproval &&
+          sharedApproval.context === shared && performance.now() < sharedApproval.expiresAt) {
+        approvals.delete(shared);
+        return;
+      }
+    }
     if (event.type === 'click' && !event.isTrusted && approval?.source === 'keydown' && approval.context === context && performance.now() < approval.expiresAt) {
       approval.source = 'click';
       return;
@@ -66,6 +82,7 @@
     // Every distinct trusted click/keydown still requires its own confirmation.
     const token = { context, source: event.type, expiresAt: performance.now() + 400 };
     approvals.set(context, token);
+    if (event.type === 'click' && L.ambiguousComposer(context) === context) activeSharedClick = token;
     setTimeout(() => { if (approvals.get(context) === token) approvals.delete(context); }, 400);
   }
 
@@ -80,9 +97,15 @@
     protect(event, contextFor(input));
   }, true);
   window.addEventListener('click', event => {
+    // No previous click's association can ever approve a fresh user gesture.
+    activeSharedClick = null;
     if (!L.isSendButton(event.target, document)) return;
     protect(event, contextFor(event.target));
   }, true);
+  // A synchronous JS requestSubmit in the target's click handler occurs before
+  // window bubbling. After bubbling, invalidate the shared-root association;
+  // the 400ms token remains usable only for an exact same-composer submit.
+  window.addEventListener('click', () => { activeSharedClick = null; }, false);
   window.addEventListener('submit', event => {
     if (!L.isComposerForm(event.target, document)) return;
     protect(event, contextFor(event.target));

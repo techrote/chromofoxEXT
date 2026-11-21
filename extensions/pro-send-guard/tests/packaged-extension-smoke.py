@@ -33,9 +33,35 @@ document.getElementById('composer-submit-button').addEventListener('click',()=>d
 document.getElementById('chat-form').addEventListener('submit',e=>{e.preventDefault();window.sent++;});
 </script></body></html>'''
 
+SHARED_HTML = '''<!doctype html><html lang="en"><body><main>
+<div data-testid="composer" id="shared-composer">
+<button data-testid="model-switcher-dropdown-button">Pro</button>
+<form id="first-form"><textarea name="prompt-textarea" id="first-draft">First draft</textarea></form>
+<form id="second-form"><textarea name="prompt-textarea" id="second-draft">Second draft</textarea></form>
+<footer><button id="shared-js" aria-label="Send">Send</button>
+<button id="shared-submit" aria-label="Send">Send</button></footer>
+</div></main><script>
+window.sharedSent=0;window.formSent=0;
+document.querySelector('#shared-js').addEventListener('click',()=>window.sharedSent++);
+document.querySelector('#shared-submit').addEventListener('click',()=>document.querySelector('#second-form').requestSubmit());
+document.querySelector('#second-form').addEventListener('submit',e=>{e.preventDefault();window.formSent++;});
+document.querySelector('#first-form').addEventListener('submit',e=>e.preventDefault());
+</script></body></html>'''
+
+EFFORT_HTML = '''<!doctype html><html lang="en"><body>
+<header><button data-testid="model-switcher-dropdown-button">Pro</button></header>
+<main><div data-testid="composer" id="effort-composer">
+<button data-testid="reasoning-effort-button" id="effort">High</button>
+<textarea name="prompt-textarea" id="effort-draft">Draft stays</textarea>
+<button aria-label="Send" id="effort-send">Send</button>
+</div></main><script>
+window.effortSent=0;
+document.querySelector('#effort-send').addEventListener('click',()=>window.effortSent++);
+</script></body></html>'''
+
 class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
-        data=HTML.encode()
+        data=(SHARED_HTML if self.path.startswith('/shared') else EFFORT_HTML if self.path.startswith('/effort') else HTML).encode()
         self.send_response(200)
         self.send_header('Content-Type','text/html; charset=utf-8')
         self.send_header('Content-Length',str(len(data)))
@@ -215,7 +241,49 @@ def main():
                     assert page.evaluate('window.sent')==2,'Unrecognised active model must not be suppressed by unrelated High'
                     assert len(dialogs)==4 and not decisions,'Unknown selector should confirm'
                     assert 'cannot verify' in dialogs[3].lower(),dialogs[3]
-                    print('PASS: packaged Chromium MV3 isolated document_start, multi-composer scoping, unrelated High, native confirm, cancel/approve/repeat/requestSubmit')
+
+                    # P1-A: one named composer containing two visible forms and
+                    # a shared JS-only Send footer. It must NOT silently bypass.
+                    decisions.extend([False, True, True, False, True])
+                    page.goto(f'http://127.0.0.1:{server.server_port}/shared',wait_until='load')
+                    assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined'
+                    page.click('#shared-js')
+                    assert page.evaluate('window.sharedSent')==0
+                    assert len(dialogs)==5 and 'cannot verify' in dialogs[-1].lower()
+                    assert page.locator('#first-draft').input_value()=='First draft'
+                    assert page.locator('#second-draft').input_value()=='Second draft'
+                    page.click('#shared-js')
+                    assert page.evaluate('window.sharedSent')==1 and len(dialogs)==6
+                    page.click('#shared-submit')
+                    assert page.evaluate('window.formSent')==1 and len(dialogs)==7, 'Shared click/requestSubmit must confirm once'
+                    # A later *distinct* direct submit must not borrow approval.
+                    page.locator('#second-form').evaluate('(form)=>form.requestSubmit()')
+                    assert page.evaluate('window.formSent')==1 and len(dialogs)==8
+                    page.click('#shared-submit')
+                    assert page.evaluate('window.formSent')==2 and len(dialogs)==9 and not decisions
+
+                    # P1-B: visible but UNLINKED header Pro plus in-composer
+                    # High reasoning-effort is UNKNOWN, not authoritative non-Pro.
+                    decisions.extend([False, True, False])
+                    page.goto(f'http://127.0.0.1:{server.server_port}/effort',wait_until='load')
+                    assert page.evaluate('typeof window.__chromofoxProSendGuardInstalled')=='undefined'
+                    page.click('#effort-send')
+                    assert page.evaluate('window.effortSent')==0 and len(dialogs)==10
+                    assert 'cannot verify' in dialogs[-1].lower(),dialogs[-1]
+                    assert page.locator('#effort-draft').input_value()=='Draft stays'
+                    page.click('#effort-send')
+                    assert page.evaluate('window.effortSent')==1 and len(dialogs)==11
+                    # A genuinely identified non-Pro model picker overrides an
+                    # unrelated High effort control without a confirmation.
+                    page.evaluate("""() => { const b=document.createElement('button');
+                        b.id='local-model';b.dataset.testid='model-switcher-dropdown-button';
+                        b.textContent='Instant';document.querySelector('#effort-composer').prepend(b); }""")
+                    page.click('#effort-send')
+                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==11
+                    page.evaluate("document.querySelector('#local-model').textContent='Pro Extended'")
+                    page.click('#effort-send')
+                    assert page.evaluate('window.effortSent')==2 and len(dialogs)==12 and not decisions
+                    print('PASS: packaged Chromium MV3 document_start, ambiguous shared-footer JS sends, model-versus-effort provenance, repeated/cross-form confirmations')
                 finally:browser.close()
         finally:server.shutdown();thread.join(timeout=3)
 
