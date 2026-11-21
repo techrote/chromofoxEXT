@@ -265,3 +265,35 @@ test('messages reject external senders and unsupported actions',async()=>{
   await assert.rejects(s.handleMessage({app:'tabgroup-ux',action:'lock',groupId:100,locked:true},{id:'other-extension'}),/External/);
   await assert.rejects(s.handleMessage({app:'tabgroup-ux',action:'garbage'}),/Unsupported/);
 });
+
+test('locked singleton dragged into a brand-new native group is returned to its original identity', async () => {
+  const m=mockBrowser(); m.addGroup(100,1,'Keep','green'); m.addTab(1,100);
+  const s=svc(m); await s.start();
+  const before=s.view().groups[0].uid;
+  await s.handleMessage({app:'tabgroup-ux',action:'lock',groupId:100,locked:true});
+  const unwanted=await m.b.tabs.group({tabIds:[1],createProperties:{windowId:1}});
+  await settled(s);
+  assert.notEqual(m.store.tabs.get(1).groupId,unwanted);
+  assert.equal(s.view().groups[0].uid,before);
+  assert.equal(s.view().groups[0].locked,true);
+  assert.equal(m.store.groups.size,1);
+});
+test('unlocked singleton dragged into a brand-new native group becomes a new unlocked identity', async () => {
+  const m=mockBrowser(); m.addGroup(100,1,'Old'); m.addTab(1,100);
+  const s=svc(m); await s.start(); const before=s.view().groups[0].uid;
+  const groupId=await m.b.tabs.group({tabIds:[1],createProperties:{windowId:1}});
+  await settled(s);
+  assert.equal(m.store.tabs.get(1).groupId,groupId);
+  assert.notEqual(s.view().groups[0].uid,before);
+  assert.equal(s.view().groups[0].locked,false);
+});
+test('default lock applies only to fresh groups and pause can disable recovery', async () => {
+  const m=mockBrowser();m.addGroup(100,1,'Existing');m.addTab(1,100);
+  const s=svc(m);await s.start();
+  await s.handleMessage({app:'tabgroup-ux',action:'settings',settings:{defaultLocked:true}});
+  assert.equal(s.view().groups[0].locked,false);
+  const gid=await m.b.tabs.group({tabIds:[1],createProperties:{windowId:1}});
+  await settled(s);
+  const newer=s.view().groups.find(g=>g.id===gid);
+  assert.equal(newer.locked,true);
+});
