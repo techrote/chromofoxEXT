@@ -52,8 +52,10 @@ def main():
             manifest_path.write_text(json.dumps(manifest))
             with sync_playwright() as p:
                 args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
-                opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=True,args=args)
-                if os.getenv('CHROME_BIN'):opts['executable_path']=os.environ['CHROME_BIN']
+                opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=True,channel='chromium',args=args)
+                if os.getenv('CHROME_BIN'):
+                    opts['executable_path']=os.environ['CHROME_BIN']
+                    del opts['channel']
                 context=p.chromium.launch_persistent_context(**opts)
                 try:
                     page=context.new_page()

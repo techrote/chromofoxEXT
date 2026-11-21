@@ -158,6 +158,7 @@ def main():
         chrome = os.environ.get('CHROME_BIN') or ('/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None)
         opts = {'headless': True, 'args': ['--no-sandbox']}
         if chrome: opts['executable_path'] = chrome
+        else: opts['channel'] = 'chromium'
         browser = p.chromium.launch(**opts)
         try:
             page = new_page(browser)
