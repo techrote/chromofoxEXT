@@ -1,0 +1,63 @@
+name: TABGROUP-UX-001 Phase A
+on:
+  push:
+    branches:
+      - feature/tabgroup-ux-001-phase-a
+    paths:
+      - extensions/tabgroup-ux/**
+      - .github/workflows/tabgroup-ux-phase-a.yml
+  pull_request:
+    paths:
+      - extensions/tabgroup-ux/**
+      - .github/workflows/tabgroup-ux-phase-a.yml
+  workflow_dispatch:
+jobs:
+  node:
+    name: Firefox Phase A checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: extensions/tabgroup-ux
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax and behavioural tests
+        run: npm run check
+      - name: Check manifest and offline packaging surface
+        run: python scripts/validate.py
+      - name: Record source identity
+        shell: bash
+        run: |
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+      - name: Package Firefox temporary add-on (Linux only)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED
+          root = Path(".")
+          names = ["manifest.json","popup.html","popup.js","manager.html","manager.js","manager.css",
+                   "src/core.js","src/service.js","src/background.js"]
+          with ZipFile("tabgroup-ux-phase-a-firefox.zip", "w", ZIP_DEFLATED) as dest:
+              for name in names:
+                  dest.write(root / name, name)
+          print("Packaged", len(names), "source-matched extension files")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: tabgroup-ux-phase-a-firefox
+          path: extensions/tabgroup-ux/tabgroup-ux-phase-a-firefox.zip
+          if-no-files-found: error
+          retention-days: 14
