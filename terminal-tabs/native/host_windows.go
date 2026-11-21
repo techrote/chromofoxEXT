@@ -155,11 +155,12 @@ func newSession(profile string,cols,rows int) (s *session,err error) {
   defer deleteAttributes.Call(ptr)
   if _,err=winCall(updateAttributes,ptr,0,procThreadAttributePseudoConsole,uintptr(unsafe.Pointer(&pseudo)),unsafe.Sizeof(pseudo),0,0);err!=nil{return nil,err}
 
-  job,err=winCall(createJob,0,0)
-  if err!=nil{return nil,fmt.Errorf("create kill-on-close job: %w",err)}
+  rawJob,jobErr:=winCall(createJob,0,0)
+  if jobErr!=nil{return nil,fmt.Errorf("create kill-on-close job: %w",jobErr)}
+  job=syscall.Handle(rawJob)
   limits:=extendedLimitInfo{}
   limits.BasicLimitInformation.LimitFlags=jobObjectLimitKillOnJobClose
-  if _,err=winCall(setJobInfo,job,jobObjectExtendedLimitInformation,uintptr(unsafe.Pointer(&limits)),unsafe.Sizeof(limits));err!=nil{return nil,fmt.Errorf("configure kill-on-close job: %w",err)}
+  if _,err=winCall(setJobInfo,uintptr(job),jobObjectExtendedLimitInformation,uintptr(unsafe.Pointer(&limits)),unsafe.Sizeof(limits));err!=nil{return nil,fmt.Errorf("configure kill-on-close job: %w",err)}
 
   si:=startupInfoEx{}
   si.Cb=uint32(unsafe.Sizeof(si))
