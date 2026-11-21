@@ -1,0 +1,38 @@
+:root {
+  color-scheme: dark;
+  --bg: #10141d;
+  --panel: #191f2b;
+  --border: #303a4b;
+  --text: #e4e9f0;
+  --muted: #96a1b5;
+  --accent: #8ab4ff;
+}
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; background: var(--bg); color: var(--text); font: 13px system-ui, sans-serif; }
+button, select { font: inherit; color: var(--text); border: 1px solid var(--border); border-radius: 6px; background: #273142; padding: 7px 11px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: #3768b2; border-color: #5284d2; font-weight: 600; }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.popup { width: 278px; padding: 18px; }
+.popup .eyebrow { color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10px; font-weight: 700; }
+.popup h1 { font-size: 19px; margin: 10px 0; }
+.popup p { color: var(--muted); line-height: 1.6; }
+.popup button { width: 100%; margin: 9px 0; }
+.popup .hint { font-size: 11px; }
+.terminal-page { display: flex; flex-direction: column; height: 100vh; min-height: 220px; overflow: hidden; }
+.toolbar { padding: 9px 13px; display: flex; align-items: center; gap: 9px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 9px; margin-right: 15px; font-weight: 700; }
+.brand small { color: var(--muted); font-weight: 400; display: block; font-size: 10px; }
+.mark { font-family: monospace; font-size: 19px; color: var(--accent); }
+.toolbar label, .statusline { color: var(--muted); }
+.toolbar select { max-width: 170px; }
+.grow { flex: 1; }
+.statusline { padding: 6px 15px; min-height: 29px; display: flex; align-items: center; gap: 8px; font-size: 11px; border-bottom: 1px solid #212938; }
+#dot { border-radius: 50%; width: 7px; height: 7px; background: #697587; flex-shrink: 0; }
+#dot[data-state="ok"] { background: #66d49c; }
+#dot[data-state="pending"] { background: #e9be67; }
+#dot[data-state="error"] { background: #f28181; }
+#screen { flex: 1; min-height: 0; overflow: hidden; padding: 12px; }
+#terminal { width: 100%; height: 100%; }
+footer { font-size: 10px; color: #79879a; padding: 5px 15px; border-top: 1px solid #222b37; }
