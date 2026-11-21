@@ -74,6 +74,12 @@ jobs:
         run: |
           node tests/windows-conpty-smoke.mjs
           if ($LASTEXITCODE -ne 0) { throw 'ConPTY integration smoke failed' }
+      - name: Verify native close kills a live descendant process
+        shell: pwsh
+        working-directory: terminal-tabs
+        run: |
+          node tests/windows-tree-cleanup.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'ConPTY descendant process cleanup failed' }
       - name: Rebuild local extension assets
         shell: pwsh
         working-directory: terminal-tabs
