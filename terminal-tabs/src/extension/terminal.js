@@ -32,6 +32,8 @@ let pending = false;
 let encoder = new TextEncoder();
 let decoder = new TextDecoder("utf-8");
 let generation = 0;
+let highestSessionId = 0;
+let activeSessionId = null;
 let ui = browser.runtime.connect({ name: "terminal" });
 
 function setStatus(label, state = "idle") {
@@ -50,14 +52,16 @@ function size() {
     rows: Math.max(5, Math.min(250, term.rows))
   };
 }
-function send(m) {
-  try { ui.postMessage(m); return true; } catch (_) {
+function send(m, sessionId = activeSessionId) {
+  if (!protocol.validSessionId(sessionId)) return false;
+  try { ui.postMessage({ ...m, sessionId }); return true; } catch (_) {
     setStatus("Extension connection lost — reload this tab", "error");
     return false;
   }
 }
 function finish(label, level = "idle") {
   generation++; // Invalidate delayed renderer ACKs and clipboard reads.
+  activeSessionId = null; // Already-forwarded notifications for old shell are stale.
   running = false;
   pending = false;
   updateButtons();
@@ -70,7 +74,10 @@ function decodeB64(s) {
   return decoder.decode(bytes, { stream: true });
 }
 function received(m) {
-  if (!m || typeof m.type !== "string") return;
+  // An event can be forwarded while A is active but delivered after B starts.
+  if (!m || !protocol.validSessionId(m.sessionId) ||
+      m.sessionId !== activeSessionId || typeof m.type !== "string") return;
+  const sessionId = activeSessionId;
   switch (m.type) {
     case "started":
       if (!pending) return;
@@ -88,16 +95,18 @@ function received(m) {
         const currentTerm = term;
         if (text) {
           currentTerm.write(text, () => {
-            if (running && generation === currentGeneration && currentTerm === term) {
-              send({ type: "ack" });
+            if (running && generation === currentGeneration &&
+                activeSessionId === sessionId && currentTerm === term) {
+              send({ type: "ack" }, sessionId);
             }
           });
-        } else if (running && generation === currentGeneration) {
-          send({ type: "ack" });
+        } else if (running && generation === currentGeneration &&
+                   activeSessionId === sessionId) {
+          send({ type: "ack" }, sessionId);
         }
       } catch (_) {
         finish("Terminal output decode error", "error");
-        send({ type: "close" });
+        send({ type: "close" }, sessionId);
       }
       break;
     case "exit":
@@ -106,7 +115,7 @@ function received(m) {
       break;
     case "error":
       finish(m.message || "Native host error", "error");
-      send({ type: "close" });
+      send({ type: "close" }, sessionId);
       break;
     case "disconnected":
       if (running || pending) {
@@ -128,6 +137,7 @@ startButton.addEventListener("click", () => {
   if (!protocol.profiles.includes(profile) || !protocol.validSize(dimensions.cols, dimensions.rows)) {
     setStatus("Unsupported shell or terminal size", "error"); return;
   }
+  activeSessionId = ++highestSessionId;
   pending = true;
   updateButtons();
   setStatus("Connecting to Windows native host…", "pending");
@@ -136,8 +146,9 @@ startButton.addEventListener("click", () => {
 });
 stopButton.addEventListener("click", () => {
   if (running || pending) {
+    const sessionId = activeSessionId;
     finish("Session ended", "idle");
-    send({ type: "close" });
+    send({ type: "close" }, sessionId);
   }
 });
 function handleTerminalInput(data) {

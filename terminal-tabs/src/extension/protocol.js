@@ -4,8 +4,10 @@
   const profiles = Object.freeze(["powershell", "cmd", "pwsh", "wsl"]);
   const validSize = (c, r) => Number.isInteger(c) && c >= 20 && c <= 500 &&
     Number.isInteger(r) && r >= 5 && r <= 250;
+  const validSessionId = (id) => Number.isSafeInteger(id) && id > 0;
   const validUI = (m) => {
-    if (!m || typeof m !== "object" || Array.isArray(m)) return false;
+    if (!m || typeof m !== "object" || Array.isArray(m) ||
+        !validSessionId(m.sessionId)) return false;
     switch (m.type) {
       case "start":
         return profiles.includes(m.profile) && validSize(m.cols, m.rows);
@@ -33,7 +35,7 @@
       default: return false;
     }
   };
-  const api = Object.freeze({ profiles, validSize, validUI, validNative });
+  const api = Object.freeze({ profiles, validSize, validSessionId, validUI, validNative });
   root.ChromoTerminalProtocol = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(globalThis);

@@ -19,12 +19,16 @@ function signal(ui, m) {
 }
 function releaseNative(s, reason) {
   const port = s.native;
+  const sessionId = s.activeSessionId;
   s.native = null;
+  s.activeSessionId = null;
   if (port) {
     try { port.postMessage({ type: "close" }); } catch (_) {}
     try { port.disconnect(); } catch (_) {}
   }
-  if (reason) signal(s.ui, { type: "disconnected", message: reason });
+  if (reason && sessionId !== null) {
+    signal(s.ui, { type: "disconnected", sessionId, message: reason });
+  }
 }
 function dispose(s) {
   if (s.disposed) return;
@@ -41,48 +45,68 @@ browser.runtime.onConnect.addListener((ui) => {
   const tabId = ui.sender.tab.id;
   const old = sessions.get(tabId);
   if (old) dispose(old);
-  const s = { tabId, ui, native: null, disposed: false };
+  const s = { tabId, ui, native: null, disposed: false,
+    activeSessionId: null, highestSessionId: 0 };
   sessions.set(tabId, s);
 
   ui.onMessage.addListener((msg) => {
     if (s.disposed) return;
     if (!ChromoTerminalProtocol.validUI(msg)) {
-      signal(ui, { type: "error", message: "Rejected malformed terminal request" });
+      if (s.activeSessionId !== null && msg?.sessionId === s.activeSessionId) {
+        signal(ui, { type: "error", sessionId: s.activeSessionId,
+          message: "Rejected malformed terminal request" });
+      }
       return;
     }
     if (msg.type === "start") {
+      // Reject delayed or repeated starts that could displace a newer shell.
+      if (msg.sessionId <= s.highestSessionId) return;
       if (s.native) releaseNative(s);
+      s.highestSessionId = msg.sessionId;
+      s.activeSessionId = msg.sessionId;
+      const sessionId = msg.sessionId;
       try {
         const n = browser.runtime.connectNative(HOST_NAME);
         s.native = n;
         n.onMessage.addListener((event) => {
-          if (s.disposed || s.native !== n) return;
+          if (s.disposed || s.native !== n || s.activeSessionId !== sessionId) return;
           if (!ChromoTerminalProtocol.validNative(event)) {
-            signal(ui, { type: "error", message: "Invalid native host response" });
-            releaseNative(s, "Host protocol error");
+            signal(ui, { type: "error", sessionId,
+              message: "Invalid native host response" });
+            releaseNative(s);
             return;
           }
-          signal(ui, event);
+          signal(ui, { ...event, sessionId });
         });
         n.onDisconnect.addListener(() => {
-          if (s.disposed || s.native !== n) return;
+          if (s.disposed || s.native !== n || s.activeSessionId !== sessionId) return;
           const message = browser.runtime.lastError && browser.runtime.lastError.message;
           s.native = null;
-          signal(ui, { type: "disconnected", message: message || "Native host disconnected" });
+          s.activeSessionId = null;
+          signal(ui, { type: "disconnected", sessionId,
+            message: message || "Native host disconnected" });
         });
-        n.postMessage(msg);
+        // Strip the browser-only identity: native Go protocol is intentionally strict.
+        n.postMessage({ type: "start", profile: msg.profile,
+          cols: msg.cols, rows: msg.rows });
       } catch (e) {
         releaseNative(s);
-        signal(ui, { type: "disconnected", message: e.message || "Native host unavailable" });
+        signal(ui, { type: "disconnected", sessionId,
+          message: e.message || "Native host unavailable" });
       }
-    } else if (msg.type === "close") {
-      // The UI already marks this intentional End as complete. Do not send
-      // a delayed 'disconnected' event: it may arrive after a new Start and
-      // incorrectly terminate the new session's pending state.
-      releaseNative(s);
-    } else if (s.native) {
-      try { s.native.postMessage(msg); } catch (_) {
-        releaseNative(s, "Unable to send to native terminal host");
+    } else if (msg.sessionId === s.activeSessionId) {
+      // Stale close, input, resize and ACK must never touch a replacement shell.
+      if (msg.type === "close") {
+        releaseNative(s);
+      } else if (s.native) {
+        const nativeMessage = msg.type === "input" ?
+          { type: "input", data: msg.data } :
+          msg.type === "resize" ?
+          { type: "resize", cols: msg.cols, rows: msg.rows } :
+          { type: "ack" };
+        try { s.native.postMessage(nativeMessage); } catch (_) {
+          releaseNative(s, "Unable to send to native terminal host");
+        }
       }
     }
   });
