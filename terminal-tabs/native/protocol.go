@@ -64,13 +64,16 @@ func (w *frameWriter) send(msg response) error {
   if len(b) > maxOutboundFrame { return errors.New("outbound message too large") }
   w.Lock()
   defer w.Unlock()
-  if err := binary.Write(w.writer, binary.LittleEndian, uint32(len(b))); err != nil { return err }
-  // io.Writer is allowed to do partial writes; always complete the frame.
-  for len(b) > 0 {
-    n, err := w.writer.Write(b)
-    if err != nil { return err }
-    if n <= 0 { return io.ErrShortWrite }
-    b = b[n:]
+  var prefix [4]byte
+  binary.LittleEndian.PutUint32(prefix[:], uint32(len(b)))
+  // Standard io.Writer may legally return a short write without an error.
+  for _, part := range [][]byte{prefix[:], b} {
+    for len(part) > 0 {
+      n, err := w.writer.Write(part)
+      if err != nil { return err }
+      if n <= 0 { return io.ErrShortWrite }
+      part = part[n:]
+    }
   }
   return nil
 }
