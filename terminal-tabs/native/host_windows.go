@@ -282,7 +282,8 @@ func (s *session) waitExit(w *frameWriter) {
   var code uint32
   if syscall.GetExitCodeProcess(s.process,&code)==nil {
     stage(fmt.Sprintf("shell exited with code %d",code))
-    _=w.send(response{Type:"exit",Code:int64(code)})
+    exitCode:=int64(code)
+    _=w.send(response{Type:"exit",Code:&exitCode})
   }
 }
 

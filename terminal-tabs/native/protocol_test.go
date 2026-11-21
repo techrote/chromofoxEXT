@@ -56,6 +56,21 @@ func TestFramedOutputAndConcurrentWriters(t *testing.T) {
   if out.Len()!=0 {t.Fatal("extra bytes")}
 }
 
+func TestExitZeroIsExplicitlyEncoded(t *testing.T) {
+  var b bytes.Buffer
+  zero := int64(0)
+  w := &frameWriter{writer:&b}
+  if err:=w.send(response{Type:"exit",Code:&zero});err!=nil{t.Fatal(err)}
+  var prefix uint32
+  if err:=binary.Read(&b,binary.LittleEndian,&prefix);err!=nil{t.Fatal(err)}
+  data:=make([]byte,prefix)
+  if _,err:=io.ReadFull(&b,data);err!=nil{t.Fatal(err)}
+  var decoded map[string]any
+  if err:=json.Unmarshal(data,&decoded);err!=nil{t.Fatal(err)}
+  if _,found:=decoded["code"];!found {t.Fatal("zero exit code must not be omitted")}
+  if decoded["code"]!=float64(0) {t.Fatalf("unexpected code: %v",decoded["code"])}
+}
+
 func TestValidation(t *testing.T){
   for _,p :=range []string{"powershell","cmd","pwsh","wsl"} {if !validProfile(p){t.Error(p)}}
   for _,p :=range []string{"","./cmd.exe","powershell -enc evil","../pwsh","CMD"} {if validProfile(p){t.Error(p)}}

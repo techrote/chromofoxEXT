@@ -53,12 +53,15 @@ function session(profile, expression) {
         } else if (msg.type === "data") {
           output += Buffer.from(msg.data, "base64").toString("utf8");
           send({ type: "ack" });
-          // Arithmetic output must appear as its own line, not echoed input.
-          if (!found && /(?:\r?\n)323(?:\r?\n|$)/.test(output)) {
+          // Strip common VT/OSC escapes before matching the actual result.
+          // The command echo is "17*19", not "323".
+          const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "");
+          if (!found && /\b323\b/.test(plain)) {
             found = true;
             send({ type: "close" });
           }
         } else if (msg.type === "exit") {
+          if (found && Number.isInteger(msg.code)) return finish();
           return finish(new Error(profile + ": child exited before expected output with code " + msg.code + "; output=" + output.slice(-1000)));
         } else if (msg.type === "error") {
           return finish(new Error(profile + ": native host error: " + msg.message));

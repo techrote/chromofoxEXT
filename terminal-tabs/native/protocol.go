@@ -25,7 +25,7 @@ type response struct {
   Type string `json:"type"`
   Data string `json:"data,omitempty"`
   Message string `json:"message,omitempty"`
-  Code int64 `json:"code,omitempty"`
+  Code *int64 `json:"code,omitempty"`
 }
 
 func readFrame(r io.Reader) (request, error) {
