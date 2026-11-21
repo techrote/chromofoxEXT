@@ -7,6 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from playwright.sync_api import sync_playwright
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -54,14 +55,14 @@ def main():
         assert manifest['content_scripts'][0]['matches']==['https://chatgpt.com/*','https://chat.openai.com/*']
         with sync_playwright() as p:
             args=[f'--disable-extensions-except={ext}',f'--load-extension={ext}','--no-sandbox']
-            opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=True,channel='chromium',args=args)
+            opts=dict(user_data_dir=str(Path(temp)/'profile'),headless=True,channel='chromium',ignore_default_args=['--disable-extensions'],args=args)
             if os.getenv('CHROME_BIN'):
                 opts['executable_path']=os.environ['CHROME_BIN']
                 del opts['channel']
             context=p.chromium.launch_persistent_context(**opts)
             try:
-                # Every request is routed. No external ChatGPT connections are made.
-                context.route('**/*',lambda route:route.abort())
+                # Every HTTP(S) request is routed. No external ChatGPT connections are made.
+                context.route(re.compile(r'^https?://'),lambda route:route.abort())
                 context.route('https://chatgpt.com/**',lambda route:route.fulfill(status=200,content_type='text/html',body=HTML))
                 page=context.new_page()
                 worlds=[]
