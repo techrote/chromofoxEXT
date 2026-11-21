@@ -1,84 +1,116 @@
-// Exercise actual, independent Windows ConPTY sessions through the native stdio protocol.
-// Run on Windows Actions after the Go host build, not on Linux.
+// Windows ConPTY/native-messaging integration smoke.
+// Export the unchanged production verifier for negative transport tests.
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const exe = resolve("dist/native/chromofox_terminal_host.exe");
-
-function session(profile, expression, {expectExit = false, marker = "323", expectedLines = 0} = {}) {
+export function session(profile, expression, {
+  expectExit = false, marker = "323", expectedLines = 0,
+  spawnProcess = spawn, executable = resolve("dist/native/chromofox_terminal_host.exe"),
+  timeoutMs = 25000
+} = {}) {
   return new Promise((resolveTest, rejectTest) => {
-    const child = spawn(exe, [], { windowsHide: true, stdio: ["pipe", "pipe", "pipe"], env: {...process.env, CHROMOFOX_TERM_DEBUG: "1"} });
-    let received = Buffer.alloc(0);
-    let output = "";
-    let errors = "";
-    let started = false;
-    let found = false;
-    let settled = false;
-    let exitObserved = false;
-    let visibleOutput = "";
-    const timeout = setTimeout(() => finish(new Error(profile + ": timeout; output=" + output.slice(-1000) + "; stderr=" + errors)), 25000);
-    child.stderr.on("data", (b) => { errors += b.toString("utf8").slice(0, 1000); });
-    function send(obj) {
-      const body = Buffer.from(JSON.stringify(obj), "utf8");
-      const prefix = Buffer.alloc(4);
-      prefix.writeUInt32LE(body.length, 0);
-      if (!child.stdin.destroyed) child.stdin.write(Buffer.concat([prefix, body]));
-    }
+    const child = spawnProcess(executable, [], {
+      windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+      env: {...process.env, CHROMOFOX_TERM_DEBUG: "1"}
+    });
+    let received = Buffer.alloc(0), output = "", visibleOutput = "", errors = "";
+    let started = false, found = false, nativeExit = false, closeSent = false, settled = false;
+    const timeout = setTimeout(() => finish(new Error(profile + ": timeout; output=" +
+      output.slice(-900) + "; stderr=" + errors.slice(-900))), timeoutMs);
+    child.stderr.on("data", b => { errors = (errors + b.toString("utf8")).slice(-3000); });
     function finish(err) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       try { child.stdin.end(); } catch {}
-      if (child.exitCode === null) child.kill();
+      if (err && child.exitCode === null) child.kill();
       if (err) rejectTest(err);
       else resolveTest({ profile, output: output.slice(-200) });
     }
-    child.on("error", finish);
-    child.on("exit", (code) => {
-      if (found) finish();
-      else finish(new Error(profile + ": host exited " + code + " before expected terminal output; stderr=" + errors + "; output=" + output.slice(-2000)));
+    function fail(message) { finish(new Error(profile + ": " + message +
+      "; output tail=" + output.slice(-600) + "; stderr tail=" + errors.slice(-600))); }
+    function send(obj) {
+      const body = Buffer.from(JSON.stringify(obj), "utf8");
+      const prefix = Buffer.alloc(4);
+      prefix.writeUInt32LE(body.length, 0);
+      try {
+        if (child.stdin.destroyed) return fail("host stdin closed unexpectedly");
+        child.stdin.write(Buffer.concat([prefix, body]));
+      } catch (e) { fail("host input write failed: " + e.message); }
+    }
+    function linesComplete() {
+      if (!expectedLines) return true;
+      const matches = [...visibleOutput.matchAll(/^line(\d+)\r?$/gm)];
+      if (matches.length !== expectedLines) return false;
+      const unique = new Set(matches.map(m => Number(m[1])));
+      if (unique.size !== expectedLines) return false;
+      for (let i = 1; i <= expectedLines; i++) if (!unique.has(i)) return false;
+      return true;
+    }
+    child.on("error", e => fail("host spawn error: " + e.message));
+    // 'close' occurs AFTER all stdio has drained. 'exit' alone does not.
+    child.on("close", (code, signal) => {
+      if (settled) return;
+      if (code !== 0 || signal) return fail("unexpected host termination (code=" + code +
+        ", signal=" + signal + ")");
+      if (received.length) return fail("truncated native frame at host shutdown");
+      if (!started || !found || !closeSent) return fail("host closed before successful command/close");
+      if (expectExit && !nativeExit) return fail("host closed without native exit frame");
+      if (expectExit && !linesComplete()) return fail("host closed without complete output");
+      finish();
     });
-    child.stdout.on("data", (chunk) => {
+    child.stdout.on("data", chunk => {
+      if (settled) return;
       received = Buffer.concat([received, chunk]);
-      while (received.length >= 4) {
+      while (!settled && received.length >= 4) {
         const length = received.readUInt32LE(0);
-        if (length < 2 || length > 65536) return finish(new Error("invalid host frame " + length));
+        if (length < 2 || length > 65536) return fail("invalid native frame length " + length);
         if (received.length < 4 + length) break;
         let msg;
         try { msg = JSON.parse(received.subarray(4, 4 + length).toString("utf8")); }
-        catch (e) { return finish(e); }
+        catch (e) { return fail("invalid host JSON: " + e.message); }
         received = received.subarray(4 + length);
-        if (msg.type === "started" && !started) {
+        if (msg.type === "started") {
+          if (started || nativeExit) return fail("duplicate or late started frame");
           started = true;
           send({ type: "input", data: expression + "\r" });
         } else if (msg.type === "data") {
-          output += Buffer.from(msg.data, "base64").toString("utf8");
-          send({ type: "ack" });
-          // Strip common VT/OSC escapes before matching the actual result.
-          // The command echo is "17*19", not "323".
-          const plain = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "");
-          visibleOutput = plain;
-          if (exitObserved) return finish(new Error(profile + ": received output after exit"));
-          if (!found && plain.includes(marker)) {
-            found = true;
-            if (!expectExit) send({ type: "close" });
+          if (!started || nativeExit || typeof msg.data !== "string") {
+            return fail("data before start or after native exit");
           }
-        } else if (msg.type === "exit") {
-          if (!expectExit) {
-            if (found && Number.isInteger(msg.code)) return finish();
-          } else {
-            const lines = (visibleOutput.match(/^line\d+\r?$/gm) || []).length;
-            if (found && Number.isInteger(msg.code) && lines >= expectedLines) {
-              exitObserved = true;
-              setTimeout(() => finish(), 100);
-              continue;
+          output += Buffer.from(msg.data, "base64").toString("utf8");
+          if (output.length > 2000000) return fail("excessive smoke output");
+          send({ type: "ack" });
+          visibleOutput = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+            .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "");
+          if (!found && visibleOutput.includes(marker)) {
+            found = true;
+            // Basic interactive mode deliberately closes a running shell.
+            // The exit/drain qualification must wait for a real native exit.
+            if (!expectExit) {
+              closeSent = true;
+              send({ type: "close" });
             }
           }
-          return finish(new Error(profile + ": exit before full output drain (lines=" +
-            (visibleOutput.match(/^line\d+\r?$/gm) || []).length + ", expected=" + expectedLines +
-            ", code=" + msg.code + "); tail=" + output.slice(-600)));
+        } else if (msg.type === "exit") {
+          if (!started || nativeExit || !Number.isSafeInteger(msg.code) || msg.code !== 0) {
+            return fail("invalid or nonzero native exit code " + msg.code);
+          }
+          if (!found || (expectExit && !linesComplete())) {
+            return fail("native exit before all output (count=" +
+              (visibleOutput.match(/^line\d+\r?$/gm) || []).length +
+              ", expected=" + expectedLines + ")");
+          }
+          nativeExit = true;
+          if (!closeSent) {
+            closeSent = true;
+            send({ type: "close" });
+          }
         } else if (msg.type === "error") {
-          return finish(new Error(profile + ": native host error: " + msg.message));
+          return fail("native host error: " + msg.message);
+        } else {
+          return fail("unexpected host frame " + msg.type);
         }
       }
     });
@@ -86,17 +118,20 @@ function session(profile, expression, {expectExit = false, marker = "323", expec
   });
 }
 
-const results = await Promise.all([
-  session("cmd", "set /a 17*19"),
-  session("powershell", "(17 * 19)")
-]);
-// Both sessions produce >32 KiB of output and then exit normally.
-// A native 'exit' frame is correct only after every output line is delivered.
-const drained = await Promise.all([
-  session("cmd", 'for /L %i in (1,1,2000) do @echo line%i\recho DRAIN_COMPLETE\rexit', {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000}),
-  session("powershell", '1..2000 | ForEach-Object { "line$_" }\rWrite-Output DRAIN_COMPLETE\rexit', {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000})
-]);
-results.push(...drained);
-for (const result of results) {
-  console.log(result.profile + " native ConPTY command/closure PASS");
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  // Two independently interactive shells (intentional host Close).
+  const interactive = await Promise.all([
+    session("cmd", "set /a 17*19"),
+    session("powershell", "(17 * 19)")
+  ]);
+  // Required native exit frame and all 2,000 distinct lines before host Close.
+  const drained = await Promise.all([
+    session("cmd", 'for /L %i in (1,1,2000) do @echo line%i\recho DRAIN_COMPLETE\rexit',
+      {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000}),
+    session("powershell", '1..2000 | ForEach-Object { "line$_" }\rWrite-Output DRAIN_COMPLETE\rexit',
+      {expectExit:true, marker:"DRAIN_COMPLETE", expectedLines:2000})
+  ]);
+  for (const result of [...interactive, ...drained]) {
+    console.log(result.profile + " native ConPTY command/closure PASS");
+  }
 }
