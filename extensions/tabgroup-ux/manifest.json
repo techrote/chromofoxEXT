@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Tab Groups Enhanced — Phase A",
+  "version": "0.1.0",
+  "description": "Firefox native tab group manager with soft membership locks and local palette editor.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "tabgroup-ux@chromofoxext.local",
+      "strict_min_version": "138.0"
+    }
+  },
+  "permissions": [
+    "tabGroups",
+    "sessions",
+    "storage"
+  ],
+  "background": {
+    "scripts": [
+      "src/core.js",
+      "src/service.js",
+      "src/background.js"
+    ]
+  },
+  "action": {
+    "default_title": "Tab Groups Enhanced",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "manager.html",
+    "open_in_tab": true
+  }
+}
