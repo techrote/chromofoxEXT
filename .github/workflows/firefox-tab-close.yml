@@ -1,0 +1,20 @@
+name: Firefox tab-close CSS helper
+on:
+  pull_request:
+    paths:
+      - "firefox-ui/hide-tab-close-buttons/**"
+      - ".github/workflows/firefox-tab-close.yml"
+  push:
+    paths:
+      - "firefox-ui/hide-tab-close-buttons/**"
+      - ".github/workflows/firefox-tab-close.yml"
+permissions:
+  contents: read
+jobs:
+  windows-powershell-roundtrip:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test installation, exact restoration, backups and malformed CSS on Windows PowerShell 5.1
+        shell: powershell
+        run: .\firefox-ui\hide-tab-close-buttons\tests\roundtrip.ps1
